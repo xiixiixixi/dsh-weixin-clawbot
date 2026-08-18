@@ -29,6 +29,18 @@ import {
 } from './format.js'
 import { decideDm, decideGroup } from './policy.js'
 import {
+  granularityFromConfig,
+  loadState,
+  noticeToolsOf,
+  replyOnOf,
+  resolveStatePath,
+  saveState,
+  type Granularity,
+  type RuntimeOverrides,
+  type WorkspaceLite,
+  type WorkspaceScope,
+} from './state.js'
+import {
   isWechatSession,
   sessionIdFor,
   subjectFromSessionId,
@@ -54,6 +66,17 @@ export type WechatQrPayload = {
   url?: string
   /** 已登录用户信息。 */
   user?: { id: string; name: string }
+  /** 当前 puppet 后端包名。 */
+  puppet: string
+  /** 生效的运行时设置。 */
+  settings: { granularity: Granularity; workspaceScope: WorkspaceScope }
+  /** workspaceRegistry 投影（无注册表时为空）。 */
+  workspaces: WorkspaceLite[]
+}
+
+/** workspaceRegistry 的最小结构类型：避免新增包依赖。 */
+export type WorkspaceRegistryLike = {
+  list(): ReadonlyArray<{ id: unknown; title: string; path: string }>
 }
 
 export class WechatBackend {
@@ -64,12 +87,17 @@ export class WechatBackend {
   private readonly disposers: Array<() => void> = []
   private readonly log: (message: string) => void
   private qrState: WechatQrState = { kind: 'none' }
+  private workspaceRegistry: WorkspaceRegistryLike | undefined
+  private overrides: RuntimeOverrides = {}
+  private readonly stateFile: string
 
   constructor(
     private readonly ctx: Context,
     private readonly config: WechatConfig,
+    stateFile: string = resolveStatePath(),
   ) {
     this.log = (message: string) => this.ctx.logger.info(message)
+    this.stateFile = stateFile
   }
 
   /** 当前二维码/登录状态（HTTP 路由读取）。 */
@@ -79,6 +107,9 @@ export class WechatBackend {
         ok: true,
         state: this.qrState,
         url: `https://wechaty.js.org/qrcode/${encodeURIComponent(this.qrState.qrcode)}`,
+        puppet: this.config.puppet,
+        settings: this.effectiveSettings(),
+        workspaces: this.workspacesProjection(),
       }
     }
     if (this.qrState.kind === 'logged-in') {
@@ -86,9 +117,61 @@ export class WechatBackend {
         ok: true,
         state: this.qrState,
         user: { id: this.qrState.userId, name: this.qrState.userName },
+        puppet: this.config.puppet,
+        settings: this.effectiveSettings(),
+        workspaces: this.workspacesProjection(),
       }
     }
-    return { ok: true, state: { kind: 'none' } }
+    return {
+      ok: true,
+      state: { kind: 'none' },
+      puppet: this.config.puppet,
+      settings: this.effectiveSettings(),
+      workspaces: this.workspacesProjection(),
+    }
+  }
+
+  /** workspaceRegistry 注入/撤销（index.ts 懒注入调用）。 */
+  setWorkspaceRegistry(registry: WorkspaceRegistryLike | undefined): void {
+    this.workspaceRegistry = registry
+  }
+
+  /** 工作区列表投影（无注册表时空数组）。 */
+  workspacesProjection(): WorkspaceLite[] {
+    return (this.workspaceRegistry?.list() ?? []).map((workspace) => ({
+      id: String(workspace.id),
+      title: workspace.title,
+      path: workspace.path,
+    }))
+  }
+
+  /** 当前生效设置：state 覆盖优先，缺省从静态配置推导。 */
+  effectiveSettings(): { granularity: Granularity; workspaceScope: WorkspaceScope } {
+    return {
+      granularity: this.overrides.granularity ?? granularityFromConfig(this.config),
+      workspaceScope: this.overrides.workspaceScope ?? 'all',
+    }
+  }
+
+  /** 合并覆盖 → 持久化 → 返回生效值（弹窗 POST /wechat/settings 调用）。 */
+  updateSettings(patch: RuntimeOverrides): { granularity: Granularity; workspaceScope: WorkspaceScope } {
+    this.overrides = { ...this.overrides, ...patch }
+    saveState(this.stateFile, this.overrides)
+    return this.effectiveSettings()
+  }
+
+  /** 解绑：登出微信、复位扫码状态（幂等）。 */
+  async logout(): Promise<void> {
+    await this.bot?.logout().catch((error: unknown) =>
+      this.log(`[wechat] 解绑失败: ${String(error)}`),
+    )
+    this.currentUser = undefined
+    this.qrState = { kind: 'none' }
+  }
+
+  /** 测试可见的 agent 创建入口。 */
+  async getOrCreateAgentForTest(sessionId: SessionId): Promise<Agent> {
+    return this.getOrCreateAgent(sessionId)
   }
 
   /** 异步渲染二维码 PNG（供 Web 扫码窗口内嵌显示）。 */
@@ -107,6 +190,7 @@ export class WechatBackend {
   /** 启动：订阅会话事件、解析 puppet、启动 wechaty。 */
   async start(): Promise<void> {
     if (!this.config.enabled) return
+    this.overrides = loadState(this.stateFile)
     const resolved = await resolvePuppetConfig(this.config.puppet, this.config.puppetOptions)
     const bot = createWechatBot({
       name: this.config.name,
@@ -260,17 +344,19 @@ export class WechatBackend {
 
     switch (event.type) {
       case 'assistant/message': {
-        if (this.config.replyOn !== 'step') return
+        if (replyOnOf(this.effectiveSettings().granularity) !== 'step') return
         const text = extractAssistantText(event.data.message)
         if (text.trim()) await this.reply(targetId, text)
         return
       }
       case 'tool/call': {
-        if (this.config.noticeTools) await this.reply(targetId, `🔧 调用工具 ${event.data.name}`)
+        if (noticeToolsOf(this.effectiveSettings().granularity)) {
+          await this.reply(targetId, `🔧 调用工具 ${event.data.name}`)
+        }
         return
       }
       case 'turn/end': {
-        if (this.config.replyOn === 'turn') {
+        if (replyOnOf(this.effectiveSettings().granularity) === 'turn') {
           const last = session.events.findLast((entry) => entry.type === 'assistant/message')
           if (last && last.type === 'assistant/message') {
             const text = extractAssistantText(last.data.message)
@@ -333,6 +419,16 @@ export class WechatBackend {
     }
   }
 
+  /** 新微信会话的 cwd：范围选定工作区优先（注册表消失时回退静态配置）。 */
+  private agentCwd(): string {
+    const scope = this.effectiveSettings().workspaceScope
+    if (scope !== 'all') {
+      const hit = this.workspacesProjection().find((workspace) => workspace.id === scope.workspaceId)
+      if (hit) return hit.path
+    }
+    return this.config.workspace
+  }
+
   /** 获取（或创建）一个微信主体专属的 agent。 */
   private async getOrCreateAgent(sessionId: SessionId): Promise<Agent> {
     const key = String(sessionId)
@@ -342,7 +438,7 @@ export class WechatBackend {
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const { agent, dispose } = await this.ctx.agents.create({
       sessionId,
-      meta: { cwd: this.config.workspace },
+      meta: { cwd: this.agentCwd() },
       agentOptions: {
         provider: selection.provider,
         model: this.config.model || selection.model,

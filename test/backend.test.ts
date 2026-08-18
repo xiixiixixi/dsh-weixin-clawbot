@@ -34,6 +34,7 @@ const fakeBot = {
   },
   async start() {},
   async stop() {},
+  logout: vi.fn(async () => {}),
   Contact: {
     async find(): Promise<{ say: (text: string) => Promise<void> }> {
       return {
@@ -235,6 +236,110 @@ describe('WechatBackend', () => {
 
     expect(ctx.agents.create).toHaveBeenCalledTimes(1)
     expect(followup).toHaveBeenCalledTimes(2)
+
+    await backend.dispose()
+  })
+})
+
+// ── 运行时设置 / 解绑 ──────────────────────────────────────────
+
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { loadState } from '../src/state.js'
+import type { RuntimeOverrides } from '../src/state.js'
+import type { Mock } from 'vitest'
+
+function tempStateFile(): string {
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-wechat-be-')), 'state.json')
+}
+
+function lastCreateArg(ctx: Context): { meta?: { cwd?: string } } {
+  return (ctx.agents.create as Mock).mock.calls.at(-1)?.[0]
+}
+
+describe('WechatBackend 运行时设置', () => {
+  beforeEach(() => {
+    fakeBot.sent.length = 0
+    fakeBot.logout.mockClear()
+  })
+
+  it('effectiveSettings 无覆盖时从静态配置推导', () => {
+    const { ctx } = makeContext()
+    const backend = new WechatBackend(ctx, makeConfig(), tempStateFile())
+    expect(backend.effectiveSettings()).toEqual({ granularity: 'standard', workspaceScope: 'all' })
+  })
+
+  it('updateSettings 持久化并热应用 replyOn/noticeTools', () => {
+    const file = tempStateFile()
+    const { ctx } = makeContext()
+    const backend = new WechatBackend(
+      ctx,
+      Config({ puppet: '@juzi/wechaty-puppet-service', noticeTools: true } as unknown as WechatConfig),
+      file,
+    )
+    expect(backend.effectiveSettings().granularity).toBe('detailed') // 默认 step+true
+    backend.updateSettings({ granularity: 'summary' })
+    expect(loadState(file)).toEqual<RuntimeOverrides>({ granularity: 'summary' })
+    expect(backend.effectiveSettings()).toEqual({ granularity: 'summary', workspaceScope: 'all' })
+  })
+
+  it('workspaceScope 指定工作区后新 agent 的 cwd 用该工作区 path，工作区消失时回退', async () => {
+    const { ctx } = makeContext()
+    const backend = new WechatBackend(
+      ctx,
+      Config({ puppet: '@juzi/wechaty-puppet-service', workspace: '/default' } as unknown as WechatConfig),
+      tempStateFile(),
+    )
+    backend.setWorkspaceRegistry({
+      list: () => [{ id: 'w1' as never, title: 'dsh', path: '/Users/x/git/dsh' }],
+    })
+    backend.updateSettings({ workspaceScope: { workspaceId: 'w1' } })
+    await backend.start()
+
+    await backend.getOrCreateAgentForTest(SessionId('wechat:direct:u1'))
+    expect(lastCreateArg(ctx).meta?.cwd).toBe('/Users/x/git/dsh')
+
+    // 工作区后来消失：回退 config.workspace，不抛错
+    backend.setWorkspaceRegistry({ list: () => [] })
+    await backend.getOrCreateAgentForTest(SessionId('wechat:direct:u2'))
+    expect(lastCreateArg(ctx).meta?.cwd).toBe('/default')
+
+    await backend.dispose()
+  })
+
+  it('workspacesProjection 无注册表时为空数组', () => {
+    const { ctx } = makeContext()
+    const backend = new WechatBackend(ctx, makeConfig(), tempStateFile())
+    expect(backend.workspacesProjection()).toEqual([])
+  })
+
+  it('logout 触发 bot.logout 并复位状态', async () => {
+    const { ctx } = makeContext()
+    const backend = new WechatBackend(ctx, makeConfig(), tempStateFile())
+    await backend.start()
+    fakeBot.handlers.get('login')?.({ name: () => 'u', id: 'wxid' } as never)
+    expect(backend.qrPayload().state.kind).toBe('logged-in')
+
+    await backend.logout()
+    expect(fakeBot.logout).toHaveBeenCalled()
+    expect(backend.qrPayload().state.kind).toBe('none')
+
+    await backend.dispose()
+  })
+
+  it('qrPayload 携带 settings/workspaces/puppet', async () => {
+    const { ctx } = makeContext()
+    const backend = new WechatBackend(ctx, makeConfig(), tempStateFile())
+    backend.setWorkspaceRegistry({
+      list: () => [{ id: 'w1' as never, title: 'dsh', path: '/p/dsh' }],
+    })
+    await backend.start()
+    const payload = backend.qrPayload()
+    expect(payload.puppet).toBe('@juzi/wechaty-puppet-service')
+    expect(payload.settings.granularity).toBe('standard')
+    expect(payload.settings.workspaceScope).toBe('all')
+    expect(payload.workspaces).toEqual([{ id: 'w1', title: 'dsh', path: '/p/dsh' }])
 
     await backend.dispose()
   })
