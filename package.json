@@ -1,0 +1,63 @@
+{
+  "name": "dsh-wechat",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness 微信远程控制插件：用微信消息远程对话/控制运行中的 DSH agent",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "wechat",
+    "weixin",
+    "微信",
+    "wechaty",
+    "cordis"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-agent-default-model": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-session": "^0.1.0-rc.7",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "dependencies": {
+    "@juzi/file-box": "^1.8.2",
+    "@juzi/wechaty": "^1.0.164",
+    "@juzi/wechaty-puppet-service": "^1.0.124",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "optionalDependencies": {
+    "wechaty-puppet-official-account": "^1.10.14",
+    "wechaty-puppet-wechat": "^1.18.4",
+    "wechaty-puppet-wcferry": "^0.1.7"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@deepseek-ai/dsh-agent": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-agent-default-model": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.7",
+    "@deepseek-ai/schemastery": "3.18.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

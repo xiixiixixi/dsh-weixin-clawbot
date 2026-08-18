@@ -1,0 +1,28 @@
+# 追加到 $DSH_HOME/profiles/<profile>/cordis.patch.yml 的完整示例。
+# 说明：cordis.patch.yml 是 profile 的用户补丁层，insert 会把条目追加进组合树。
+- insert:
+    - id: wechat
+      name: dsh-wechat
+      config:
+        enabled: true
+        # 接入后端：wechaty-puppet-wechat / wechaty-puppet-official-account
+        #           @juzi/wechaty-puppet-service / wechaty-puppet-wcferry
+        puppet: wechaty-puppet-wechat
+        puppetOptions: {}
+        # agent 的工作目录（不设则用进程 cwd）
+        workspace: !!js process.cwd()
+        # 模型 id；留空使用 DSH 默认模型选择
+        model: ''
+        # 私聊策略：open / pairing / allowlist / disabled
+        dmPolicy: pairing
+        allowFrom: []            # 微信号 wxid_xxx / 备注名 / * 通配
+        # 群策略：open / allowlist / disabled
+        groupPolicy: allowlist
+        groups: []               # 群 id / 群名 / * 通配
+        groupRequireMention: true
+        autoAcceptFriend: false
+        mediaMaxMb: 30
+        noticeTools: true
+        # 回复时机：step（每步完成即发）/ turn（回合结束发最终文本）
+        replyOn: step
+        textChunkLimit: 3800
