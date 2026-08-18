@@ -60,6 +60,7 @@ export type ControlCommand =
   | { kind: 'stop' }
   | { kind: 'status' }
   | { kind: 'help' }
+  | { kind: 'ws'; arg?: string }
 
 /** 解析微信控制命令；非命令返回 null。 */
 export function parseControlCommand(text: string): ControlCommand | null {
@@ -70,6 +71,8 @@ export function parseControlCommand(text: string): ControlCommand | null {
   if (/^\/stop\b/.test(lower) || trimmed === '/停止') return { kind: 'stop' }
   if (/^\/status\b/.test(lower) || trimmed === '/状态') return { kind: 'status' }
   if (/^\/help\b/.test(lower) || trimmed === '/帮助') return { kind: 'help' }
+  const ws = /^\/(?:ws|工作区)\b\s*(.*)$/.exec(trimmed)
+  if (ws) return { kind: 'ws', arg: ws[1].trim() || undefined }
   return null
 }
 
@@ -79,6 +82,7 @@ export const HELP_TEXT = [
   '/new    开始新会话（清空上下文）',
   '/stop   停止当前任务',
   '/status 查看状态',
+  '/ws     查看/切换工作区（/ws 2 或 /ws 名称）',
   '/help   显示本帮助',
   '',
   '直接发消息即可与 DSH agent 对话；群里请 @我。',

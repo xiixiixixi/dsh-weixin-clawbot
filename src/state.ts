@@ -15,8 +15,8 @@ import type { WechatConfig } from './config.js'
 /** 回复颗粒度：详细程度三档（弹窗下拉）。 */
 export type Granularity = 'detailed' | 'standard' | 'summary'
 
-/** 工作区访问范围：所有工作区，或绑定到某个工作区 id。 */
-export type WorkspaceScope = 'all' | { workspaceId: string }
+/** 工作区访问范围：所有工作区，或绑定到一组工作区 id（可多选）。 */
+export type WorkspaceScope = 'all' | { workspaceIds: string[] }
 
 /** state 文件里的运行时覆盖；字段缺省 = 用静态配置推导。 */
 export type RuntimeOverrides = {
@@ -74,10 +74,17 @@ export function loadState(file: string): RuntimeOverrides {
   } else if (
     typeof record.workspaceScope === 'object'
     && record.workspaceScope !== null
-    && typeof (record.workspaceScope as Record<string, unknown>).workspaceId === 'string'
   ) {
-    result.workspaceScope = {
-      workspaceId: (record.workspaceScope as { workspaceId: string }).workspaceId,
+    const scope = record.workspaceScope as Record<string, unknown>
+    // 兼容单选旧格式 { workspaceId } → { workspaceIds: [id] }
+    if (typeof scope.workspaceId === 'string') {
+      result.workspaceScope = { workspaceIds: [scope.workspaceId] }
+    } else if (
+      Array.isArray(scope.workspaceIds)
+      && scope.workspaceIds.every((id): id is string => typeof id === 'string')
+      && scope.workspaceIds.length > 0
+    ) {
+      result.workspaceScope = { workspaceIds: scope.workspaceIds }
     }
   }
   return result
@@ -122,15 +129,22 @@ export function validateSettingsInput(
     } else if (
       typeof record.workspaceScope === 'object'
       && record.workspaceScope !== null
-      && typeof (record.workspaceScope as Record<string, unknown>).workspaceId === 'string'
+      && Array.isArray((record.workspaceScope as Record<string, unknown>).workspaceIds)
     ) {
-      const id = (record.workspaceScope as { workspaceId: string }).workspaceId
-      if (!workspaces.some((workspace) => workspace.id === id)) {
-        return { ok: false, message: `未知工作区: ${id}` }
+      const raw = (record.workspaceScope as { workspaceIds: unknown[] }).workspaceIds
+      if (
+        raw.length === 0
+        || !raw.every((id): id is string => typeof id === 'string')
+      ) {
+        return { ok: false, message: 'workspaceIds 必须是非空字符串数组' }
       }
-      patch.workspaceScope = { workspaceId: id }
+      const unknown = raw.filter((id) => !workspaces.some((workspace) => workspace.id === id))
+      if (unknown.length > 0) {
+        return { ok: false, message: `未知工作区: ${unknown.join(', ')}` }
+      }
+      patch.workspaceScope = { workspaceIds: raw }
     } else {
-      return { ok: false, message: "workspaceScope 必须是 'all' 或 { workspaceId }" }
+      return { ok: false, message: "workspaceScope 必须是 'all' 或 { workspaceIds: string[] }" }
     }
   }
 

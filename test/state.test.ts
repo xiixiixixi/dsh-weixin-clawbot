@@ -36,8 +36,8 @@ describe('granularity 映射', () => {
 describe('state 文件读写', () => {
   it('saveState 原子写入并可读回', () => {
     const file = path.join(dir, 'dsh-wechat.state.json')
-    saveState(file, { granularity: 'summary', workspaceScope: { workspaceId: 'w1' } })
-    expect(loadState(file)).toEqual({ granularity: 'summary', workspaceScope: { workspaceId: 'w1' } })
+    saveState(file, { granularity: 'summary', workspaceScope: { workspaceIds: ['w1', 'w2'] } })
+    expect(loadState(file)).toEqual({ granularity: 'summary', workspaceScope: { workspaceIds: ['w1', 'w2'] } })
   })
   it('saveState 自动创建父目录', () => {
     const file = path.join(dir, 'nested/deep/state.json')
@@ -49,6 +49,18 @@ describe('state 文件读写', () => {
     mkdirSync(dir, { recursive: true })
     writeFileSync(path.join(dir, 'bad.json'), '{oops')
     expect(loadState(path.join(dir, 'bad.json'))).toEqual({})
+  })
+  it('单选旧格式 { workspaceId } 迁移为多选数组', () => {
+    const file = path.join(dir, 'legacy.json')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(file, JSON.stringify({ workspaceScope: { workspaceId: 'w9' } }))
+    expect(loadState(file)).toEqual({ workspaceScope: { workspaceIds: ['w9'] } })
+  })
+  it('空数组 / 非字符串数组的 scope 被丢弃', () => {
+    const file = path.join(dir, 'badscope.json')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(file, JSON.stringify({ workspaceScope: { workspaceIds: [] } }))
+    expect(loadState(file)).toEqual({})
   })
   it('文件里多余字段被丢弃', () => {
     const file = path.join(dir, 'extra.json')
@@ -80,21 +92,23 @@ describe('validateSettingsInput', () => {
       patch: { granularity: 'summary' },
     })
   })
-  it('接受 all / 已存在的 workspaceId', () => {
+  it('接受 all / 多选 workspaceIds', () => {
     expect(validateSettingsInput({ workspaceScope: 'all' }, workspaces)).toEqual({
       ok: true,
       patch: { workspaceScope: 'all' },
     })
-    expect(validateSettingsInput({ workspaceScope: { workspaceId: 'w2' } }, workspaces)).toEqual({
+    expect(validateSettingsInput({ workspaceScope: { workspaceIds: ['w2', 'w1'] } }, workspaces)).toEqual({
       ok: true,
-      patch: { workspaceScope: { workspaceId: 'w2' } },
+      patch: { workspaceScope: { workspaceIds: ['w2', 'w1'] } },
     })
   })
-  it('拒绝非法枚举/结构/未知工作区/空 body', () => {
+  it('拒绝非法枚举/结构/未知工作区/空数组/空 body', () => {
     expect(validateSettingsInput({ granularity: 'loud' }, workspaces).ok).toBe(false)
     expect(validateSettingsInput({ workspaceScope: 'some' }, workspaces).ok).toBe(false)
-    expect(validateSettingsInput({ workspaceScope: { workspaceId: 'nope' } }, workspaces).ok).toBe(false)
-    expect(validateSettingsInput({ workspaceScope: { workspaceId: 'w1' } }, []).ok).toBe(false)
+    expect(validateSettingsInput({ workspaceScope: { workspaceIds: ['w1', 'nope'] } }, workspaces).ok).toBe(false)
+    expect(validateSettingsInput({ workspaceScope: { workspaceIds: [] } }, workspaces).ok).toBe(false)
+    expect(validateSettingsInput({ workspaceScope: { workspaceIds: 'w1' } }, workspaces).ok).toBe(false)
+    expect(validateSettingsInput({ workspaceScope: { workspaceIds: ['w1'] } }, []).ok).toBe(false)
     expect(validateSettingsInput({}, workspaces).ok).toBe(false)
     expect(validateSettingsInput('nonsense', workspaces).ok).toBe(false)
   })

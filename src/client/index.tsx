@@ -184,6 +184,71 @@ function DropdownSelect(props: {
   )
 }
 
+/** 工作区访问范围多选列表（zcode 同款 checkbox 行）。 */
+function WorkspaceScopeList(props: {
+  /** 展示用的 scope（乐观覆盖优先）。 */
+  scope: 'all' | { workspaceIds: string[] }
+  disabled: boolean
+  workspaces: ReadonlyArray<{ id: string; title: string; path: string }>
+  onAll: () => void
+  onToggle: (workspaceId: string) => void
+}): JSX.Element {
+  const scope: 'all' | { workspaceIds: string[] } = props.scope
+  const isAll = scope === 'all'
+  const selected: string[] = isAll ? [] : scope.workspaceIds
+
+  const row = (props2: {
+    key: string
+    checked: boolean
+    title: string
+    path?: string
+    onToggle: () => void
+  }): JSX.Element => (
+    <button
+      key={props2.key}
+      type="button"
+      className="dsh-wechat-check-row"
+      disabled={props.disabled}
+      role="menuitemcheckbox"
+      aria-checked={props2.checked}
+      onClick={props2.onToggle}
+    >
+      <span className="dsh-wechat-check-box" data-checked={props2.checked}>
+        {props2.checked && <IconCheckOutline14 size={12} />}
+      </span>
+      <span className="dsh-wechat-check-text">
+        <span className="dsh-wechat-check-title">{props2.title}</span>
+        {props2.path !== undefined && <span className="dsh-wechat-check-path">{props2.path}</span>}
+      </span>
+    </button>
+  )
+
+  return (
+    <div className="dsh-wechat-check-list" role="group" aria-label="工作区访问范围">
+      {row({
+        key: 'all',
+        checked: isAll,
+        title: '所有工作区',
+        onToggle: () => {
+          if (!isAll) props.onAll()
+        },
+      })}
+      {props.workspaces.map((workspace) =>
+        row({
+          key: workspace.id,
+          checked: selected.includes(workspace.id),
+          title: workspace.title,
+          path: workspace.path,
+          onToggle: () => props.onToggle(workspace.id),
+        }),
+      )}
+      {props.workspaces.length === 0 && (
+        <div className="dsh-wechat-check-empty">DSH 里还没有已注册的工作区。</div>
+      )}
+    </div>
+  )
+}
+
 /** 配对管理弹窗主体（headless Modal：自绘 header/关闭钮，chrome 走 Modal）。 */
 function WechatDialog(props: {
   open: boolean
@@ -193,23 +258,35 @@ function WechatDialog(props: {
   refresh: () => void
 }): JSX.Element {
   const [copied, setCopied] = useState(false)
+  // 乐观工作区范围：POST 成功后立即生效，等轮询追上（值一致）后清除，
+  // 避免快速连点时基于旧列表计算下一次勾选。
+  const [optimisticScope, setOptimisticScope] = useState<'all' | { workspaceIds: string[] } | null>(null)
   const status = statusOf(props.payload, props.error)
   const state = props.payload?.state
   const settings = props.payload?.settings
   const workspaces = props.payload?.workspaces ?? []
+  const effectiveScope = optimisticScope ?? settings?.workspaceScope ?? 'all'
 
-  const scopeValue =
-    settings !== undefined && settings.workspaceScope !== 'all'
-      ? settings.workspaceScope.workspaceId
-      : 'all'
-  const scopeOptions = [
-    { id: 'all', label: '所有工作区' },
-    ...workspaces.map((workspace) => ({
-      id: workspace.id,
-      label: workspace.title,
-      desc: workspace.path,
-    })),
-  ]
+  useEffect(() => {
+    if (
+      optimisticScope !== null
+      && JSON.stringify(settings?.workspaceScope) === JSON.stringify(optimisticScope)
+    ) {
+      setOptimisticScope(null)
+    }
+  }, [settings, optimisticScope])
+
+  // 权威 scope 走 ref：同一渲染批次里的连点也能看到彼此的结果。
+  const scopeRef = useRef<'all' | { workspaceIds: string[] }>(effectiveScope)
+  scopeRef.current = effectiveScope
+  const applyScope = (next: 'all' | { workspaceIds: string[] }) => {
+    scopeRef.current = next
+    setOptimisticScope(next)
+    void postJson('/wechat/settings', { workspaceScope: next }).then((ok) => {
+      if (ok) props.refresh()
+      else setOptimisticScope(null)
+    })
+  }
 
   const copyLink = async () => {
     if (props.payload?.url === undefined) return
@@ -345,24 +422,26 @@ function WechatDialog(props: {
 
         <div className="dsh-wechat-section">
           <div className="dsh-wechat-section-title">工作区访问范围</div>
-          <SettingRow label="可用工作区" desc="限制机器人可以在哪些工作区里工作。">
-            <DropdownSelect
-              label="所有工作区"
-              options={scopeOptions}
-              value={scopeValue}
-              disabled={settings === undefined}
-              onSelect={(id) => {
-                void updateSettings({
-                  workspaceScope: id === 'all' ? 'all' : { workspaceId: id },
-                })
-              }}
-            />
-          </SettingRow>
+          <div className="dsh-wechat-section-desc">
+            勾选机器人可以使用的工作区；在微信里发送 /ws 切换。
+          </div>
+          <WorkspaceScopeList
+            scope={effectiveScope}
+            disabled={settings === undefined}
+            workspaces={workspaces}
+            onAll={() => applyScope('all')}
+            onToggle={(workspaceId) => {
+              const current = scopeRef.current
+              const selected: string[] =
+                current === 'all' ? [] : current.workspaceIds
+              const next = selected.includes(workspaceId)
+                ? selected.filter((id) => id !== workspaceId)
+                : [...selected, workspaceId]
+              // 取消最后一个工作区 = 回到不限制
+              applyScope(next.length === 0 ? 'all' : { workspaceIds: next })
+            }}
+          />
         </div>
-
-        {props.payload?.puppet !== undefined && (
-          <div className="dsh-wechat-footer-cap">后端：{props.payload.puppet}</div>
-        )}
       </div>
     </Modal>
   )

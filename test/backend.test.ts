@@ -248,6 +248,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { loadState } from '../src/state.js'
 import type { RuntimeOverrides } from '../src/state.js'
+import { sessionIdFor, subjectFromSessionId } from '../src/sessions.js'
 import type { Mock } from 'vitest'
 
 function tempStateFile(): string {
@@ -284,28 +285,65 @@ describe('WechatBackend 运行时设置', () => {
     expect(backend.effectiveSettings()).toEqual({ granularity: 'summary', workspaceScope: 'all' })
   })
 
-  it('workspaceScope 指定工作区后新 agent 的 cwd 用该工作区 path，工作区消失时回退', async () => {
+  it('workspaceScope 多选：默认 cwd = 第一个勾选工作区；/ws 切换后落到对应会话', async () => {
     const { ctx } = makeContext()
     const backend = new WechatBackend(
       ctx,
-      Config({ puppet: '@juzi/wechaty-puppet-service', workspace: '/default' } as unknown as WechatConfig),
+      Config({ puppet: '@juzi/wechaty-puppet-service', workspace: '/default', dmPolicy: 'open' } as unknown as WechatConfig),
       tempStateFile(),
     )
     backend.setWorkspaceRegistry({
-      list: () => [{ id: 'w1' as never, title: 'dsh', path: '/Users/x/git/dsh' }],
+      list: () => [
+        { id: 'w1' as never, title: 'dsh', path: '/p/dsh' },
+        { id: 'w2' as never, title: 'sleuth', path: '/p/sleuth' },
+      ],
     })
-    backend.updateSettings({ workspaceScope: { workspaceId: 'w1' } })
+    backend.updateSettings({ workspaceScope: { workspaceIds: ['w2', 'w1'] } })
     await backend.start()
 
-    await backend.getOrCreateAgentForTest(SessionId('wechat:direct:u1'))
-    expect(lastCreateArg(ctx).meta?.cwd).toBe('/Users/x/git/dsh')
+    const onMessage = fakeBot.handlers.get('message')
+    fakeBot.sent.length = 0
+    // 默认路由到第一个勾选的工作区 w2
+    await (onMessage as (m: never) => Promise<void>)(makeMessage({ text: () => '你好' }) as never)
+    expect(lastCreateArg(ctx).meta?.cwd).toBe('/p/sleuth')
+    expect(String((ctx.agents.create as Mock).mock.calls.at(-1)?.[0].sessionId)).toBe(
+      'wechat:direct:wxid_abc#w2',
+    )
 
-    // 工作区后来消失：回退 config.workspace，不抛错
-    backend.setWorkspaceRegistry({ list: () => [] })
-    await backend.getOrCreateAgentForTest(SessionId('wechat:direct:u2'))
-    expect(lastCreateArg(ctx).meta?.cwd).toBe('/default')
+    // /ws 列表 → /ws 1 切换 → 下条消息进入 w1 会话
+    fakeBot.sent.length = 0
+    await (onMessage as (m: never) => Promise<void>)(makeMessage({ text: () => '/ws' }) as never)
+    expect(fakeBot.sent.join(' ')).toContain('sleuth')
+    await (onMessage as (m: never) => Promise<void>)(makeMessage({ text: () => '/ws dsh' }) as never)
+    expect(fakeBot.sent.join(' ')).toContain('已切换到「dsh」')
+    fakeBot.sent.length = 0
+    await (onMessage as (m: never) => Promise<void>)(makeMessage({ text: () => '继续' }) as never)
+    expect(lastCreateArg(ctx).meta?.cwd).toBe('/p/dsh')
+    expect(String((ctx.agents.create as Mock).mock.calls.at(-1)?.[0].sessionId)).toBe(
+      'wechat:direct:wxid_abc#w1',
+    )
+
+    // 两个工作区的会话并存（第一条消息在 w2，切换后落在 w1）
+    expect((ctx.agents.create as Mock).mock.calls.length).toBe(2)
 
     await backend.dispose()
+  })
+
+  it('/ws 未勾选任何工作区时提示去 Web 弹窗配置', async () => {
+    const { ctx } = makeContext()
+    const backend = new WechatBackend(ctx, makeConfig(), tempStateFile())
+    await backend.start()
+    const onMessage = fakeBot.handlers.get('message')
+    fakeBot.sent.length = 0
+    await (onMessage as (m: never) => Promise<void>)(makeMessage({ text: () => '/ws' }) as never)
+    expect(fakeBot.sent.join(' ')).toContain('没有可选择的工作区')
+    await backend.dispose()
+  })
+
+  it('带工作区后缀的会话 id 能反推微信主体', () => {
+    expect(subjectFromSessionId('wechat:direct:wxid_abc#w1')).toEqual({ kind: 'direct', id: 'wxid_abc' })
+    expect(String(sessionIdFor({ kind: 'direct', id: 'wxid_abc' }, 'w1'))).toBe('wechat:direct:wxid_abc#w1')
+    expect(String(sessionIdFor({ kind: 'group', id: 'r@chatroom' }))).toBe('wechat:group:r@chatroom')
   })
 
   it('workspacesProjection 无注册表时为空数组', () => {

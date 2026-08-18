@@ -52,6 +52,11 @@ type OwnedAgent = {
   dispose: () => Promise<void>
 }
 
+/** 主体在 subjectWorkspace 映射里的 key。 */
+function subjectKey(subject: WechatSubject): string {
+  return `${subject.kind}:${subject.id}`
+}
+
 /** 微信登录/扫码状态（供 Web GUI 扫码窗口展示）。 */
 export type WechatQrState =
   | { kind: 'none' }
@@ -98,6 +103,8 @@ export class WechatBackend {
   private workspaceRegistry: WorkspaceRegistryLike | undefined
   private overrides: RuntimeOverrides = {}
   private readonly stateFile: string
+  /** 主体 → /ws 切换的当前工作区 id（内存态，重启回默认）。 */
+  private readonly subjectWorkspace = new Map<string, string>()
 
   constructor(
     private readonly ctx: Context,
@@ -161,6 +168,41 @@ export class WechatBackend {
     }
   }
 
+  /** 允许访问的工作区 id 列表（'all' = 全部；多选时与现存工作区求交集）。 */
+  allowedWorkspaceIds(): string[] {
+    const scope = this.effectiveSettings().workspaceScope
+    const existing = this.workspacesProjection()
+    if (scope === 'all') return existing.map((workspace) => workspace.id)
+    const known = new Set(existing.map((workspace) => workspace.id))
+    return scope.workspaceIds.filter((id) => known.has(id))
+  }
+
+  /** 主体的当前工作区 id：/ws 切换的内存覆盖（须仍在允许范围内），否则默认。 */
+  private currentWorkspaceId(subject: WechatSubject): string | undefined {
+    const override = this.subjectWorkspace.get(subjectKey(subject))
+    if (override !== undefined && this.allowedWorkspaceIds().includes(override)) return override
+    return this.allowedWorkspaceIds()[0]
+  }
+
+  /** 会话路由：当前工作区 → 会话 id（每工作区独立历史）+ agent cwd。 */
+  private routeFor(subject: WechatSubject): { sessionId: SessionId; cwd: string; workspaceId?: string } {
+    const workspaceId = this.currentWorkspaceId(subject)
+    return {
+      sessionId: sessionIdFor(subject, workspaceId),
+      cwd: this.cwdFor(workspaceId),
+      workspaceId,
+    }
+  }
+
+  /** 工作区 id → agent cwd；未指定/已消失时回退静态配置。 */
+  private cwdFor(workspaceId: string | undefined): string {
+    if (workspaceId !== undefined) {
+      const hit = this.workspacesProjection().find((workspace) => workspace.id === workspaceId)
+      if (hit) return hit.path
+    }
+    return this.config.workspace
+  }
+
   /** 合并覆盖 → 持久化 → 返回生效值（弹窗 POST /wechat/settings 调用）。 */
   updateSettings(patch: RuntimeOverrides): { granularity: Granularity; workspaceScope: WorkspaceScope } {
     this.overrides = { ...this.overrides, ...patch }
@@ -178,8 +220,8 @@ export class WechatBackend {
   }
 
   /** 测试可见的 agent 创建入口。 */
-  async getOrCreateAgentForTest(sessionId: SessionId): Promise<Agent> {
-    return this.getOrCreateAgent(sessionId)
+  async getOrCreateAgentForTest(sessionId: SessionId, cwd: string): Promise<Agent> {
+    return this.getOrCreateAgent(sessionId, cwd)
   }
 
   /** 异步渲染二维码 PNG（供 Web 扫码窗口内嵌显示）。 */
@@ -318,8 +360,8 @@ export class WechatBackend {
     }
     if (!body) return
 
-    const sessionId = sessionIdFor(subject)
-    const agent = await this.getOrCreateAgent(sessionId)
+    const { sessionId, cwd } = this.routeFor(subject)
+    const agent = await this.getOrCreateAgent(sessionId, cwd)
     agent.followup(
       createUserMessage({
         content: [{ type: 'text', text: body }],
@@ -385,8 +427,8 @@ export class WechatBackend {
     const bot = this.bot
     if (!bot) return
     const targetId = subject.id
-    const sessionId = sessionIdFor(subject)
-    const key = String(sessionId)
+    const route = this.routeFor(subject)
+    const key = String(route.sessionId)
     const owned = this.owned.get(key)
 
     switch (command?.kind) {
@@ -410,12 +452,21 @@ export class WechatBackend {
         return
       }
       case 'status': {
+        const workspaceTitle = route.workspaceId !== undefined
+          ? this.workspacesProjection().find((workspace) => workspace.id === route.workspaceId)?.title
+          : undefined
         await this.reply(
           targetId,
-          owned
-            ? `会话: ${sessionId}\n状态: ${owned.agent.status === 'running' ? '运行中' : '空闲'}`
-            : '当前没有活跃会话。',
+          [
+            `会话: ${route.sessionId}`,
+            `状态: ${owned ? (owned.agent.status === 'running' ? '运行中' : '空闲') : '无活跃会话'}`,
+            workspaceTitle !== undefined ? `工作区: ${workspaceTitle}` : `工作目录: ${route.cwd}`,
+          ].join('\n'),
         )
+        return
+      }
+      case 'ws': {
+        await this.reply(targetId, this.wsCommandReply(subject, command.arg))
         return
       }
       case 'help': {
@@ -427,18 +478,65 @@ export class WechatBackend {
     }
   }
 
-  /** 新微信会话的 cwd：范围选定工作区优先（注册表消失时回退静态配置）。 */
-  private agentCwd(): string {
-    const scope = this.effectiveSettings().workspaceScope
-    if (scope !== 'all') {
-      const hit = this.workspacesProjection().find((workspace) => workspace.id === scope.workspaceId)
-      if (hit) return hit.path
+  /** /ws 命令：无参列出可切换的工作区；有序号/名称则切换当前主体的工作区。 */
+  private wsCommandReply(subject: WechatSubject, arg: string | undefined): string {
+    const allowed = this.allowedWorkspaceIds()
+    const projection = this.workspacesProjection()
+    const rows = allowed
+      .map((id) => projection.find((workspace) => workspace.id === id))
+      .filter((workspace): workspace is WorkspaceLite => workspace !== undefined)
+
+    if (rows.length === 0) {
+      return [
+        '当前没有可选择的工作区（未勾选任何工作区，或 DSH 未提供工作区注册表）。',
+        `默认工作目录：${this.config.workspace}`,
+        '在 Web 端「微信机器人」弹窗勾选工作区后即可用 /ws 切换。',
+      ].join('\n')
     }
-    return this.config.workspace
+
+    const currentId = this.currentWorkspaceId(subject)
+    const list = rows
+      .map((workspace, index) => {
+        const mark = workspace.id === currentId ? ' ◀ 当前' : ''
+        return `${index + 1}. ${workspace.title}  ${workspace.path}${mark}`
+      })
+      .join('\n')
+
+    if (arg === undefined) {
+      return `工作区（切换：/ws 序号 或 /ws 名称）\n${list}`
+    }
+
+    // 序号匹配
+    const index = Number.parseInt(arg, 10)
+    let target: WorkspaceLite | undefined
+    if (Number.isInteger(index) && index >= 1 && index <= rows.length) {
+      target = rows[index - 1]
+    } else {
+      // 名称/路径子串匹配；命中多个时列出候选
+      const needle = arg.toLowerCase()
+      const hits = rows.filter((workspace) =>
+        workspace.title.toLowerCase().includes(needle)
+        || workspace.path.toLowerCase().includes(needle),
+      )
+      if (hits.length === 1) target = hits[0]
+      else if (hits.length > 1) {
+        return `「${arg}」匹配到多个工作区，请用序号：\n${list}`
+      }
+    }
+
+    if (target === undefined) {
+      return `没有找到工作区「${arg}」。可用：\n${list}`
+    }
+    if (target.id === currentId) {
+      return `当前就在「${target.title}」。可用：\n${list}`
+    }
+
+    this.subjectWorkspace.set(subjectKey(subject), target.id)
+    return `已切换到「${target.title}」（${target.path}）。\n下条消息起在这个工作区继续，每个工作区会话独立。`
   }
 
-  /** 获取（或创建）一个微信主体专属的 agent。 */
-  private async getOrCreateAgent(sessionId: SessionId): Promise<Agent> {
+  /** 获取（或创建）一个微信主体专属的 agent（cwd 由路由决定）。 */
+  private async getOrCreateAgent(sessionId: SessionId, cwd: string): Promise<Agent> {
     const key = String(sessionId)
     const existing = this.owned.get(key)
     if (existing) return existing.agent
@@ -446,7 +544,7 @@ export class WechatBackend {
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const { agent, dispose } = await this.ctx.agents.create({
       sessionId,
-      meta: { cwd: this.agentCwd() },
+      meta: { cwd },
       agentOptions: {
         provider: selection.provider,
         model: this.config.model || selection.model,

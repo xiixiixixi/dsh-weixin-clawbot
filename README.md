@@ -40,7 +40,7 @@ EOF
 | `name` | string | `dsh-wechat` | wechaty 实例名 |
 | `puppet` | string | `wechaty-puppet-wechat` | 接入后端包名 |
 | `puppetOptions` | object | `{}` | 后端参数（token / appId / host 等） |
-| `workspace` | string | `process.cwd()` | agent 的工作目录 |
+| `workspace` | string | `process.cwd()` | agent 的默认工作目录（未配置时 = dsh 启动时所在目录）。勾选工作区或 `/ws` 切换后按工作区路径工作；建议显式配置成你的工程目录 |
 | `model` | string | `''` | 模型 id；留空使用 DSH 默认模型选择 |
 | `dmPolicy` | enum | `pairing` | 私聊策略：`open` / `pairing` / `allowlist` / `disabled` |
 | `allowFrom` | array | `[]` | 私聊白名单（微信号 / 备注名 / `*`） |
@@ -75,9 +75,9 @@ EOF
 
 - **关联机器人**：显示登录二维码（wechaty 扫码状态实时翻译成「等待手机扫码 / 已扫码请在手机确认 / 二维码已过期」等文案，不暴露状态码）；「无法扫码」时可复制备用链接在手机浏览器打开。扫码登录后凭据自动保存，显示已连通账号与微信 ID，可随时**解绑**。关闭弹窗不会断开连接。
 - **机器人回复颗粒度**：完整回复（每步 + 工具调用提示）/ 标准回复（每步文本）/ 摘要回复（仅回合结束发结果），即时生效。
-- **工作区访问范围**：默认「所有工作区」（agent 工作目录用插件配置的 `workspace`）；选定某个 DSH 工作区后，**新建**的微信会话会把工作目录切到该工作区（已有会话不受影响，`/new` 后生效）。
+- **工作区访问范围**：多选（zcode 同款 checkbox 列表）。默认「所有工作区」= 不限制，agent 工作目录用插件配置的 `workspace`（默认 dsh 启动目录，建议在 cordis.patch.yml 里显式配置）。勾选若干工作区后，**每个微信主体默认在第一个勾选的工作区工作**，且可在微信里随时 `/ws` 切换——每个工作区一段独立会话历史，切回来还能继续。
 
-弹窗里的颗粒度/工作区范围写入 `$DSH_HOME/dsh-wechat.state.json`（原子写，重启保持）；cordis.patch.yml 里的 `replyOn`/`noticeTools` 是缺省基准值。无 workspaceRegistry 的 profile（headless）下拉退化为「所有工作区」。
+弹窗里的颗粒度/工作区范围写入 `$DSH_HOME/dsh-wechat.state.json`（原子写，重启保持；旧版单选格式自动迁移为多选）；cordis.patch.yml 里的 `replyOn`/`noticeTools` 是缺省基准值。无 workspaceRegistry 的 profile（headless）工作区列表为空，`/ws` 会提示去 Web 弹窗配置。`/ws` 的当前选择是进程内存态，dsh 重启后回到默认工作区。
 
 ### 微信对话
 
@@ -87,7 +87,8 @@ EOF
 | --- | --- |
 | `/new` | 结束当前会话，下条消息开始全新会话 |
 | `/stop` | 中止当前运行中的任务 |
-| `/status` | 查看会话状态 |
+| `/status` | 查看会话状态（含当前工作区） |
+| `/ws` | 列出可用工作区；`/ws 2` 按序号切换，`/ws 名称` 按名称切换（每个工作区会话独立） |
 | `/help` | 帮助 |
 
 群聊需要 **@机器人** 才会响应（可配置 `groupRequireMention: false` 关闭）。
