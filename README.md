@@ -50,8 +50,8 @@ EOF
 | `autoAcceptFriend` | boolean | `false` | 自动通过好友请求 |
 | `mediaMaxMb` | number | `30` | 入站媒体大小上限（MB） |
 | `mediaDir` | string | `$DSH_HOME/wechat-media` | 入站媒体保存目录 |
-| `noticeTools` | boolean | `true` | agent 调用工具时发送提示 |
-| `replyOn` | enum | `step` | 回复时机：`step`（每步完成即发）/ `turn`（回合结束发最终文本） |
+| `noticeTools` | boolean | `true` | agent 调用工具时发送提示（弹窗「颗粒度」可运行时覆盖） |
+| `replyOn` | enum | `step` | 回复时机：`step`（每步完成即发）/ `turn`（回合结束发最终文本）；弹窗「颗粒度=摘要回复」等效 `turn`（可运行时覆盖） |
 | `textChunkLimit` | number | `3800` | 单条微信消息文本上限 |
 
 完整示例见 [examples/cordis.patch.example.yml](examples/cordis.patch.example.yml)。
@@ -65,9 +65,21 @@ EOF
 | `@juzi/wechaty-puppet-service` | 桔子云 BOT 托管服务 | 商业 token |
 | `wechaty-puppet-wcferry` | WeChatFerry（注入 Windows 桌面微信） | 免费（Windows 挂机） |
 
-后三个是可选依赖：`npm i <包名>` 手动补齐。启动后按 DSH 日志里的二维码用微信扫码登录。
+后三个是可选依赖：`npm i <包名>` 手动补齐。启动后在 Web 端侧边栏「微信」入口扫码登录（二维码只在弹窗显示，不再打印终端）。
 
 ## 使用
+
+### Web 端配对弹窗
+
+侧边栏底部「微信」手机图标（设置旁边）打开「微信机器人」管理弹窗，界面与交互对齐 zcode Bot Channel 的微信管理页：
+
+- **关联机器人**：显示登录二维码（wechaty 扫码状态实时翻译成「等待手机扫码 / 已扫码请在手机确认 / 二维码已过期」等文案，不暴露状态码）；「无法扫码」时可复制备用链接在手机浏览器打开。扫码登录后凭据自动保存，显示已连通账号与微信 ID，可随时**解绑**。关闭弹窗不会断开连接。
+- **机器人回复颗粒度**：完整回复（每步 + 工具调用提示）/ 标准回复（每步文本）/ 摘要回复（仅回合结束发结果），即时生效。
+- **工作区访问范围**：默认「所有工作区」（agent 工作目录用插件配置的 `workspace`）；选定某个 DSH 工作区后，**新建**的微信会话会把工作目录切到该工作区（已有会话不受影响，`/new` 后生效）。
+
+弹窗里的颗粒度/工作区范围写入 `$DSH_HOME/dsh-wechat.state.json`（原子写，重启保持）；cordis.patch.yml 里的 `replyOn`/`noticeTools` 是缺省基准值。无 workspaceRegistry 的 profile（headless）下拉退化为「所有工作区」。
+
+### 微信对话
 
 登录成功后，直接给机器人发微信消息即可对话。控制命令：
 
