@@ -79,6 +79,14 @@ export type WorkspaceRegistryLike = {
   list(): ReadonlyArray<{ id: unknown; title: string; path: string }>
 }
 
+// 本地结构类型增强：真实服务由 @deepseek-ai/dsh-workspace 提供（运行时注入），
+// 插件编译不依赖该包，只声明自己用到的 list() 面。
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    workspaceRegistry?: WorkspaceRegistryLike
+  }
+}
+
 export class WechatBackend {
   private bot: Wechaty | undefined
   private readonly owned = new Map<string, OwnedAgent>()

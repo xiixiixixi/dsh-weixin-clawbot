@@ -22,9 +22,11 @@ import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-session'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { WechatBackend } from './backend.js'
 import { Config, type WechatConfig } from './config.js'
+import { validateSettingsInput } from './state.js'
 
 export { Config, resolveMediaDir, type WechatConfig, type DmPolicy, type GroupPolicy } from './config.js'
 export {
@@ -51,6 +53,19 @@ export {
   type WechatSubject,
 } from './sessions.js'
 export { WechatBackend } from './backend.js'
+export {
+  granularityFromConfig,
+  loadState,
+  noticeToolsOf,
+  replyOnOf,
+  resolveStatePath,
+  saveState,
+  validateSettingsInput,
+  type Granularity,
+  type RuntimeOverrides,
+  type WorkspaceLite,
+  type WorkspaceScope,
+} from './state.js'
 
 export const name = 'dsh-wechat'
 
@@ -58,6 +73,39 @@ export const inject = ['agents', 'sessions', 'agentDefaultModel'] as const
 
 /** Web GUI 扫码窗口轮询的二维码/登录状态端点。 */
 export const QRCODE_ROUTE_PATH = '/wechat/qrcode'
+
+/** 读取并解析 JSON body（限制 64KB，异常一律返回 undefined）。 */
+function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length
+      if (size > 64 * 1024) {
+        req.destroy()
+        resolve(undefined)
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      try {
+        resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : undefined)
+      } catch {
+        resolve(undefined)
+      }
+    })
+    req.on('error', () => resolve(undefined))
+  })
+}
+
+function jsonReply(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  })
+  res.end(JSON.stringify(body))
+}
 
 export function apply(ctx: Context, config: WechatConfig): void {
   const backend = new WechatBackend(ctx, config)
@@ -80,6 +128,39 @@ export function apply(ctx: Context, config: WechatConfig): void {
       },
     }
     webCtx.effect(() => webCtx.webServer.register(route), 'dsh-wechat: /wechat/qrcode route')
+
+    webCtx.effect(() => webCtx.webServer.register({
+      kind: 'exact',
+      path: '/wechat/settings',
+      handler: async (req: IncomingMessage, res: ServerResponse) => {
+        const body = await readJsonBody(req)
+        const verdict = validateSettingsInput(body, backend.workspacesProjection())
+        if (!verdict.ok) {
+          jsonReply(res, 400, { ok: false, message: verdict.message })
+          return
+        }
+        jsonReply(res, 200, { ok: true, settings: backend.updateSettings(verdict.patch) })
+      },
+    } satisfies WebRoute), 'dsh-wechat: /wechat/settings route')
+
+    webCtx.effect(() => webCtx.webServer.register({
+      kind: 'exact',
+      path: '/wechat/logout',
+      handler: async (_req: IncomingMessage, res: ServerResponse) => {
+        await backend.logout()
+        jsonReply(res, 200, { ok: true })
+      },
+    } satisfies WebRoute), 'dsh-wechat: /wechat/logout route')
+  })
+
+  // workspaceRegistry 可选注入：注册表上线时把工作区列表接进后端；
+  // headless 等没有注册表的 profile 不影响微信功能（下拉退化为「所有工作区」）。
+  ctx.inject(['workspaceRegistry'], (regCtx) => {
+    backend.setWorkspaceRegistry(regCtx.workspaceRegistry)
+    regCtx.effect(
+      () => () => backend.setWorkspaceRegistry(undefined),
+      'dsh-wechat: workspaceRegistry unbind',
+    )
   })
 
   ctx.effect(() => () => {
