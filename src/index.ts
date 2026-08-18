@@ -20,6 +20,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-session'
+import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-host-webserver'
 
 import { WechatBackend } from './backend.js'
 import { Config, type WechatConfig } from './config.js'
@@ -54,11 +56,32 @@ export const name = 'dsh-wechat'
 
 export const inject = ['agents', 'sessions', 'agentDefaultModel'] as const
 
+/** Web GUI 扫码窗口轮询的二维码/登录状态端点。 */
+export const QRCODE_ROUTE_PATH = '/wechat/qrcode'
+
 export function apply(ctx: Context, config: WechatConfig): void {
   const backend = new WechatBackend(ctx, config)
   void backend.start().catch((error: unknown) => {
     ctx.logger.error(`dsh-wechat: 启动失败: ${String(error)}`)
   })
+
+  // 提供二维码给浏览器：web profile 里有 webServer 服务时注册 HTTP 路由；
+  // 没有（headless 等 profile）则等待服务出现，永不注册也不影响微信功能。
+  ctx.inject(['webServer'], (webCtx) => {
+    const route: WebRoute = {
+      kind: 'exact',
+      path: QRCODE_ROUTE_PATH,
+      handler: (_req, res) => {
+        res.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        })
+        res.end(JSON.stringify(backend.qrPayload()))
+      },
+    }
+    webCtx.effect(() => webCtx.webServer.register(route), 'dsh-wechat: /wechat/qrcode route')
+  })
+
   ctx.effect(() => () => {
     void backend.dispose()
   })

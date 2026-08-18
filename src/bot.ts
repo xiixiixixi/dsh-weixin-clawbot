@@ -13,7 +13,6 @@ import type {
   Wechaty,
 } from '@juzi/wechaty'
 import { WechatyBuilder, types } from '@juzi/wechaty'
-import qrcodeTerminal from 'qrcode-terminal'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -33,6 +32,7 @@ export type WechatBotOptions = {
 /** 需要「直接实例化类」接入的 puppet 包，以及各自的导出名候选。 */
 const PUPPET_CLASS_CANDIDATES: Record<string, string[]> = {
   'wechaty-puppet-wechat': ['PuppetWechat', 'default'],
+  'wechaty-puppet-wechat4u': ['PuppetWechat4u', 'default'],
   'wechaty-puppet-official-account': ['PuppetOfficialAccount', 'default'],
   'wechaty-puppet-wcferry': ['PuppetWCFerry', 'PuppetWcferry', 'default'],
 }
@@ -80,16 +80,6 @@ export async function resolvePuppetConfig(
   throw new Error(`在 ${puppet} 中找不到可用的 puppet 类导出（尝试了：${candidates.join(', ')}）`)
 }
 
-/** 打印登录二维码：终端渲染 + 网页链接。 */
-export function printLoginQrcode(qrcode: string, log: (message: string) => void): void {
-  try {
-    qrcodeTerminal.generate(qrcode, { small: true })
-  } catch {
-    // 终端渲染失败不影响主流程
-  }
-  log(`扫码登录链接：https://wechaty.js.org/qrcode/${encodeURIComponent(qrcode)}`)
-}
-
 /** 创建 wechaty 实例并绑定标准事件。 */
 export function createWechatBot(opts: WechatBotOptions): Wechaty {
   const bot = WechatyBuilder.build({
@@ -99,8 +89,7 @@ export function createWechatBot(opts: WechatBotOptions): Wechaty {
   })
 
   bot.on('scan', async (qrcode, status) => {
-    opts.log(`微信登录二维码（状态 ${status}），请用微信扫码确认登录`)
-    printLoginQrcode(qrcode, opts.log)
+    opts.log(`微信登录二维码已生成（状态 ${status}），请在 Web 界面点击微信图标扫码登录`)
     opts.onScan?.(qrcode, status)
   })
 

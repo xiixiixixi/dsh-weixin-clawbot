@@ -3,6 +3,7 @@
  *
  * - 入站：微信消息 → 策略判断 → 每个微信主体一个 Agent → `followup`
  * - 出站：订阅 `session/event`，把本插件会话的 assistant 文本发回微信
+ * - 网页：暴露 `/wechat/qrcode` 状态，供 Web GUI 的扫码窗口轮询登录二维码
  *
  * @module dsh-wechat/backend
  */
@@ -14,6 +15,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session'
 import type { Contact, Friendship, Message, Wechaty } from '@juzi/wechaty'
+import QRCode from 'qrcode'
 
 import { createWechatBot, resolvePuppetConfig, saveInboundMedia, sendToRecipient } from './bot.js'
 import { resolveMediaDir, type WechatConfig } from './config.js'
@@ -38,6 +40,22 @@ type OwnedAgent = {
   dispose: () => Promise<void>
 }
 
+/** 微信登录/扫码状态（供 Web GUI 扫码窗口展示）。 */
+export type WechatQrState =
+  | { kind: 'none' }
+  | { kind: 'scan'; qrcode: string; status: number; png: string }
+  | { kind: 'logged-in'; userId: string; userName: string }
+
+/** `/wechat/qrcode` 路由的响应载荷。 */
+export type WechatQrPayload = {
+  ok: boolean
+  state: WechatQrState
+  /** 扫码备用链接（终端/手机浏览器打开）。 */
+  url?: string
+  /** 已登录用户信息。 */
+  user?: { id: string; name: string }
+}
+
 export class WechatBackend {
   private bot: Wechaty | undefined
   private readonly owned = new Map<string, OwnedAgent>()
@@ -45,12 +63,45 @@ export class WechatBackend {
   private started = false
   private readonly disposers: Array<() => void> = []
   private readonly log: (message: string) => void
+  private qrState: WechatQrState = { kind: 'none' }
 
   constructor(
     private readonly ctx: Context,
     private readonly config: WechatConfig,
   ) {
     this.log = (message: string) => this.ctx.logger.info(message)
+  }
+
+  /** 当前二维码/登录状态（HTTP 路由读取）。 */
+  qrPayload(): WechatQrPayload {
+    if (this.qrState.kind === 'scan') {
+      return {
+        ok: true,
+        state: this.qrState,
+        url: `https://wechaty.js.org/qrcode/${encodeURIComponent(this.qrState.qrcode)}`,
+      }
+    }
+    if (this.qrState.kind === 'logged-in') {
+      return {
+        ok: true,
+        state: this.qrState,
+        user: { id: this.qrState.userId, name: this.qrState.userName },
+      }
+    }
+    return { ok: true, state: { kind: 'none' } }
+  }
+
+  /** 异步渲染二维码 PNG（供 Web 扫码窗口内嵌显示）。 */
+  private async renderQrPng(qrcode: string, status: number): Promise<void> {
+    try {
+      const png = await QRCode.toDataURL(qrcode, { margin: 1, width: 320 })
+      // 只认最新二维码，避免过期码覆盖新码
+      if (this.qrState.kind === 'scan' && this.qrState.qrcode === qrcode) {
+        this.qrState = { kind: 'scan', qrcode, status, png }
+      }
+    } catch (error) {
+      this.log(`[wechat] 二维码渲染失败: ${String(error)}`)
+    }
   }
 
   /** 启动：订阅会话事件、解析 puppet、启动 wechaty。 */
@@ -62,11 +113,17 @@ export class WechatBackend {
       puppet: resolved.puppet as string,
       puppetOptions: resolved.puppetOptions,
       log: this.log,
+      onScan: (qrcode, status) => {
+        this.qrState = { kind: 'scan', qrcode, status, png: '' }
+        void this.renderQrPng(qrcode, status)
+      },
       onLogin: (user) => {
         this.currentUser = user
+        this.qrState = { kind: 'logged-in', userId: user.id, userName: user.name() }
       },
       onLogout: () => {
         this.currentUser = undefined
+        this.qrState = { kind: 'none' }
       },
       onMessage: (message) => this.handleMessage(message),
       onFriendship: (friendship) => this.handleFriendship(friendship),
@@ -99,6 +156,7 @@ export class WechatBackend {
       this.log(`[wechat] 停止机器人失败: ${String(error)}`),
     )
     this.bot = undefined
+    this.qrState = { kind: 'none' }
   }
 
   /** 入站微信消息 → agent。 */
