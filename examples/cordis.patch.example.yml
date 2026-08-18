@@ -5,24 +5,30 @@
       name: dsh-wechat
       config:
         enabled: true
-        # 接入后端：wechaty-puppet-wechat / wechaty-puppet-official-account
-        #           @juzi/wechaty-puppet-service / wechaty-puppet-wcferry
-        puppet: wechaty-puppet-wechat
+        # 接入后端：
+        #   ilink                            微信官方机器人通道（clawbot，默认，推荐）
+        #   wechaty-puppet-wechat4u          UOS 网页协议（有风控风险）
+        #   wechaty-puppet-official-account  公众号（需服务号）
+        #   @juzi/wechaty-puppet-service     桔子云 BOT（商业 token）
+        #   wechaty-puppet-wcferry           WeChatFerry（Windows 挂机）
+        puppet: ilink
         puppetOptions: {}
-        # agent 的工作目录（不设则用进程 cwd）
-        workspace: !!js process.cwd()
+        #   botAgent: DSH-Wechat/1.0        # ilink 可选：自声明 UA（观测用）
+        # agent 的默认工作目录（= 工程主文件夹；不设则用 dsh 启动目录，建议显式配置）
+        workspace: /path/to/your/project
         # 模型 id；留空使用 DSH 默认模型选择
         model: ''
         # 私聊策略：open / pairing / allowlist / disabled
-        dmPolicy: pairing
+        dmPolicy: open
         allowFrom: []            # 微信号 wxid_xxx / 备注名 / * 通配
         # 群策略：open / allowlist / disabled
         groupPolicy: allowlist
         groups: []               # 群 id / 群名 / * 通配
         groupRequireMention: true
-        autoAcceptFriend: false
+        autoAcceptFriend: false  # 仅 wechaty 后端
         mediaMaxMb: 30
         noticeTools: true
         # 回复时机：step（每步完成即发）/ turn（回合结束发最终文本）
+        # 弹窗「颗粒度」可运行时覆盖（摘要回复 = turn）
         replyOn: step
         textChunkLimit: 3800

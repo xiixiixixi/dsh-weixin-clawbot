@@ -399,3 +399,40 @@
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* ── iLink 配对码输入行 ─────────────────────────────────── */
+
+.dsh-wechat-verify {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.dsh-wechat-verify-label {
+  flex: none;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-wechat-verify-input {
+  width: 90px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  font-family: var(--ds-font-family-code);
+}
+
+.dsh-wechat-verify-input:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}

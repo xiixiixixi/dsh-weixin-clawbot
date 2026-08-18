@@ -249,6 +249,54 @@ function WorkspaceScopeList(props: {
   )
 }
 
+/** iLink 配对码输入行：手机微信显示数字，输入后 POST /wechat/verify。 */
+function VerifyCodeRow(props: { state: 'needed' | 'wrong' | 'blocked' }): JSX.Element {
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  if (props.state === 'blocked') {
+    return (
+      <div className="dsh-wechat-note">
+        <span aria-hidden="true">⛔</span>
+        <span>配对码多次输入错误，请稍后等二维码自动刷新后重试。</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="dsh-wechat-verify">
+      <span className="dsh-wechat-verify-label">
+        {props.state === 'wrong' ? '❌ 配对码不正确，请重新输入：' : '输入手机微信上显示的数字，完成配对：'}
+      </span>
+      <input
+        className="dsh-wechat-verify-input"
+        value={code}
+        inputMode="numeric"
+        autoFocus
+        placeholder="配对码"
+        onChange={(event) => setCode(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && code.trim() !== '' && !busy) {
+            setBusy(true)
+            void postJson('/wechat/verify', { code: code.trim() }).finally(() => setBusy(false))
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="dsh-wechat-select"
+        disabled={code.trim() === '' || busy}
+        onClick={() => {
+          setBusy(true)
+          void postJson('/wechat/verify', { code: code.trim() }).finally(() => setBusy(false))
+        }}
+      >
+        提交
+      </button>
+    </div>
+  )
+}
+
 /** 配对管理弹窗主体（headless Modal：自绘 header/关闭钮，chrome 走 Modal）。 */
 function WechatDialog(props: {
   open: boolean
@@ -353,7 +401,8 @@ function WechatDialog(props: {
                 )}
               </div>
               <div className="dsh-wechat-qr-hint">{scanHint(state.status)}</div>
-              {props.payload?.url !== undefined && (
+              {state.verifyCode !== undefined && <VerifyCodeRow state={state.verifyCode} />}
+              {props.payload?.url !== undefined && state.verifyCode === undefined && (
                 <div className="dsh-wechat-linkrow">
                   <span>无法扫码？在手机浏览器打开链接</span>
                   <button type="button" className="dsh-wechat-linkbtn" onClick={() => void copyLink()}>

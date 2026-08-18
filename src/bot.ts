@@ -82,6 +82,11 @@ export async function resolvePuppetConfig(
 
 /** 创建 wechaty 实例并绑定标准事件。 */
 export function createWechatBot(opts: WechatBotOptions): Wechaty {
+  // wechaty-puppet 内部的 contactRawPayload 轮询在会话失效时会以 WARN 级
+  // 刷屏（如 wechat4u 的 1101）；默认只放行 error，可用 WECHATY_LOG 覆盖。
+  if (process.env.WECHATY_LOG === undefined) {
+    process.env.WECHATY_LOG = 'error'
+  }
   const bot = WechatyBuilder.build({
     name: opts.name,
     puppet: opts.puppet as never,

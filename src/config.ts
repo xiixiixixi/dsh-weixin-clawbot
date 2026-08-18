@@ -27,7 +27,7 @@ export interface WechatConfig {
   enabled: boolean
   /** wechaty 实例名，日志与诊断标识。 */
   name: string
-  /** 微信接入后端（puppet 包名）。 */
+  /** 微信接入后端：'ilink'（官方机器人通道，推荐）或 puppet 包名。 */
   puppet: string
   /** 后端参数（token、appId、host 等）。 */
   puppetOptions: Record<string, unknown>
@@ -64,7 +64,7 @@ export interface WechatConfig {
 export const Config: z<WechatConfig> = z.object({
   enabled: z.boolean().default(true),
   name: z.string().default('dsh-wechat'),
-  puppet: z.string().default('wechaty-puppet-wechat'),
+  puppet: z.string().default('ilink'),
   puppetOptions: z.dict(z.any()).default({}),
   workspace: z.string().default(process.cwd()),
   model: z.string().default(''),

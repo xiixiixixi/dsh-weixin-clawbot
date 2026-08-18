@@ -27,6 +27,7 @@ import {
   parseControlCommand,
   turnEndSummary,
 } from './format.js'
+import { IlinkChannel, type IlinkInboundMessage } from './ilink.js'
 import { decideDm, decideGroup } from './policy.js'
 import {
   granularityFromConfig,
@@ -57,10 +58,10 @@ function subjectKey(subject: WechatSubject): string {
   return `${subject.kind}:${subject.id}`
 }
 
-/** 微信登录/扫码状态（供 Web GUI 扫码窗口展示）。 */
+/** 微信登录/扫码状态（供 Web GUI 扫码窗口展示）。verifyCode 仅 iLink 配对码阶段出现。 */
 export type WechatQrState =
   | { kind: 'none' }
-  | { kind: 'scan'; qrcode: string; status: number; png: string }
+  | { kind: 'scan'; qrcode: string; status: number; png: string; verifyCode?: 'needed' | 'wrong' | 'blocked' }
   | { kind: 'logged-in'; userId: string; userName: string }
 
 /** `/wechat/qrcode` 路由的响应载荷。 */
@@ -212,6 +213,16 @@ export class WechatBackend {
 
   /** 解绑：登出微信、复位扫码状态（幂等）。 */
   async logout(): Promise<void> {
+    const ilink = this.ilinkChannel
+    if (ilink !== undefined) {
+      this.contextTokens.clear()
+      await ilink.logout()
+      this.currentUser = undefined
+      this.qrState = { kind: 'none' }
+      // 解绑后立刻回到待扫码态，弹窗出新的二维码
+      void this.runIlinkLoginLoop()
+      return
+    }
     await this.bot?.logout().catch((error: unknown) =>
       this.log(`[wechat] 解绑失败: ${String(error)}`),
     )
@@ -224,23 +235,35 @@ export class WechatBackend {
     return this.getOrCreateAgent(sessionId, cwd)
   }
 
-  /** 异步渲染二维码 PNG（供 Web 扫码窗口内嵌显示）。 */
+  /** 异步渲染二维码 PNG（供 Web 扫码窗口内嵌显示）；保留同码上的 verifyCode 标记。 */
   private async renderQrPng(qrcode: string, status: number): Promise<void> {
     try {
-      const png = await QRCode.toDataURL(qrcode, { margin: 1, width: 320 })
+      const png = await QRCode.toDataURL(qrcode, { margin: 1, width: 480 })
       // 只认最新二维码，避免过期码覆盖新码
       if (this.qrState.kind === 'scan' && this.qrState.qrcode === qrcode) {
-        this.qrState = { kind: 'scan', qrcode, status, png }
+        this.qrState = { ...this.qrState, status, png }
       }
     } catch (error) {
       this.log(`[wechat] 二维码渲染失败: ${String(error)}`)
     }
   }
 
-  /** 启动：订阅会话事件、解析 puppet、启动 wechaty。 */
+  /** 启动：订阅会话事件、解析 puppet、启动微信通道（wechaty 或 iLink）。 */
   async start(): Promise<void> {
     if (!this.config.enabled) return
     this.overrides = loadState(this.stateFile)
+
+    this.disposers.push(
+      this.ctx.on('session/event', (session: Session, event: SessionEvent) => {
+        void this.onSessionEvent(session, event)
+      }),
+    )
+
+    if (this.config.puppet === 'ilink') {
+      await this.startIlink()
+      return
+    }
+
     const resolved = await resolvePuppetConfig(this.config.puppet, this.config.puppetOptions)
     const bot = createWechatBot({
       name: this.config.name,
@@ -265,18 +288,154 @@ export class WechatBackend {
     })
     this.bot = bot
 
-    this.disposers.push(
-      this.ctx.on('session/event', (session: Session, event: SessionEvent) => {
-        void this.onSessionEvent(session, event)
-      }),
-    )
-
     await bot.start()
     this.started = true
     this.log(`[wechat] 已启动（puppet: ${this.config.puppet}）`)
   }
 
-  /** 关闭：停止 wechaty、释放全部会话与事件订阅。 */
+  // ── iLink 官方通道（clawbot） ────────────────────────────────
+
+  private ilinkChannel: IlinkChannel | undefined
+  /** ilink 出站回复需携带的每对端最新 context_token。 */
+  private readonly contextTokens = new Map<string, string>()
+  /** 二维码自动刷新次数上限。 */
+  private static readonly ILINK_QR_REFRESH_LIMIT = 5
+
+  private async startIlink(): Promise<void> {
+    const channel = new IlinkChannel({
+      stateFile: this.stateFile.replace(/dsh-wechat\.state\.json$/, 'dsh-wechat-ilink.json'),
+      log: this.log,
+    })
+    channel.setBotAgent(
+      typeof this.config.puppetOptions.botAgent === 'string'
+        ? this.config.puppetOptions.botAgent
+        : undefined,
+    )
+    this.ilinkChannel = channel
+    this.started = true
+
+    const saved = channel.savedCredentials()
+    if (saved) {
+      this.qrState = { kind: 'logged-in', userId: saved.botId, userName: `微信机器人 ${saved.botId}` }
+      this.log(`[wechat] iLink 使用已保存凭据自动登录（bot: ${saved.botId}）`)
+      void this.runIlinkLoop()
+    } else {
+      this.log('[wechat] iLink 无已保存凭据，等待在 Web 弹窗扫码')
+      void this.runIlinkLoginLoop()
+    }
+  }
+
+  /** iLink 扫码登录循环：出二维码 → 长轮询状态 → 确认后进入消息循环。 */
+  private async runIlinkLoginLoop(): Promise<void> {
+    const channel = this.ilinkChannel
+    if (channel === undefined) return
+    let refreshCount = 0
+
+    while (this.started && this.ilinkChannel === channel && channel.savedCredentials() === undefined) {
+      try {
+        const qrUrl = channel.currentQrUrl() ?? (await channel.startLogin())
+        this.qrState = { kind: 'scan', qrcode: qrUrl, status: 2, png: '' }
+        void this.renderQrPng(qrUrl, 2)
+
+        const tick = await channel.pollLoginOnce()
+        switch (tick.kind) {
+          case 'wait':
+            break
+          case 'scaned':
+            this.qrState = { kind: 'scan', qrcode: qrUrl, status: 3, png: this.qrState.kind === 'scan' ? this.qrState.png : '' }
+            break
+          case 'need-verifycode':
+            this.qrState = {
+              kind: 'scan', qrcode: qrUrl, status: 3,
+              png: this.qrState.kind === 'scan' ? this.qrState.png : '',
+              verifyCode: tick.wrongCode ? 'wrong' : 'needed',
+            }
+            break
+          case 'verify-code-blocked':
+            this.qrState = {
+              kind: 'scan', qrcode: qrUrl, status: 3,
+              png: this.qrState.kind === 'scan' ? this.qrState.png : '',
+              verifyCode: 'blocked',
+            }
+            break
+          case 'expired': {
+            refreshCount += 1
+            if (refreshCount > WechatBackend.ILINK_QR_REFRESH_LIMIT) {
+              this.log('[wechat] iLink 二维码多次过期，暂停登录；刷新页面或解绑后重试')
+              this.qrState = { kind: 'none' }
+              return
+            }
+            // 下一轮循环 startLogin 会取新码
+            break
+          }
+          case 'binded':
+            // 已绑定过：凭据应已存在，走消息循环
+            break
+          case 'confirmed': {
+            const { botId } = tick.credentials
+            this.qrState = { kind: 'logged-in', userId: botId, userName: `微信机器人 ${botId}` }
+            await this.runIlinkLoop()
+            return
+          }
+        }
+      } catch (error) {
+        this.log(`[wechat] iLink 登录流程异常（3s 后重试）: ${String(error)}`)
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
+    }
+  }
+
+  /** iLink 消息循环包装：结束后回到待扫码态（如会话失效 -14）。 */
+  private async runIlinkLoop(): Promise<void> {
+    const channel = this.ilinkChannel
+    if (channel === undefined) return
+    await channel.runMessageLoop(
+      (message) => void this.handleIlinkMessage(message),
+      (error) => this.log(`[wechat] iLink 消息循环错误: ${String(error)}`),
+    )
+    // 循环退出且凭据已失效 → 回到扫码
+    if (this.started && this.ilinkChannel === channel && channel.savedCredentials() === undefined) {
+      this.currentUser = undefined
+      void this.runIlinkLoginLoop()
+    }
+  }
+
+  /** iLink 入站消息：策略检查后走与 wechaty 相同的分发管线。 */
+  private async handleIlinkMessage(message: IlinkInboundMessage): Promise<void> {
+    if (!this.started) return
+    const subject: WechatSubject = message.groupId !== undefined
+      ? { kind: 'group', id: message.groupId }
+      : { kind: 'direct', id: message.fromUserId }
+
+    if (message.contextToken !== undefined) {
+      this.contextTokens.set(subject.id, message.contextToken)
+    }
+
+    if (subject.kind === 'group') {
+      // iLink 群消息本身就是 @机器人触发的，视为已 mention
+      const decision = decideGroup(this.config, { roomId: subject.id, roomTopic: undefined, mentionSelf: true })
+      if (!decision.allowed) return
+    } else {
+      const decision = decideDm(this.config, { id: subject.id, name: subject.id })
+      if (!decision.allowed) {
+        if (decision.reason === 'pairing') {
+          await this.reply(subject.id, this.config.pairingNotice)
+        }
+        return
+      }
+    }
+
+    const body = [message.text, message.mediaNote].filter(Boolean).join('\n')
+    if (body === '') return
+    await this.dispatchToAgent(subject, body)
+  }
+
+  /** 用户在弹窗提交手机配对码（仅 iLink）。 */
+  submitVerifyCode(code: string): void {
+    this.ilinkChannel?.submitVerifyCode(code)
+  }
+
+  /** 关闭：停止微信通道、释放全部会话与事件订阅。 */
   async dispose(): Promise<void> {
     this.started = false
     for (const disposer of this.disposers.splice(0)) disposer()
@@ -286,6 +445,9 @@ export class WechatBackend {
       )
     }
     this.owned.clear()
+    this.ilinkChannel?.stop()
+    this.ilinkChannel = undefined
+    this.contextTokens.clear()
     await this.bot?.stop().catch((error: unknown) =>
       this.log(`[wechat] 停止机器人失败: ${String(error)}`),
     )
@@ -359,6 +521,16 @@ export class WechatBackend {
       body = body ? `${body}\n${placeholder}` : placeholder
     }
     if (!body) return
+    await this.dispatchToAgent(subject, body)
+  }
+
+  /** 控制命令与 agent followup 的共用分发管线。 */
+  private async dispatchToAgent(subject: WechatSubject, body: string): Promise<void> {
+    const command = parseControlCommand(body)
+    if (command) {
+      await this.handleCommand(subject, command)
+      return
+    }
 
     const { sessionId, cwd } = this.routeFor(subject)
     const agent = await this.getOrCreateAgent(sessionId, cwd)
@@ -369,7 +541,7 @@ export class WechatBackend {
       }),
     )
     this.log(
-      `[wechat] 入站 ${isGroup ? `群 ${room!.id}` : `用户 ${from.id}`}: ${body.slice(0, 120)}`,
+      `[wechat] 入站 ${subject.kind === 'group' ? `群 ${subject.id}` : `用户 ${subject.id}`}: ${body.slice(0, 120)}`,
     )
   }
 
@@ -386,7 +558,8 @@ export class WechatBackend {
 
   /** 会话事件 → 微信回复。 */
   private async onSessionEvent(session: Session, event: SessionEvent): Promise<void> {
-    if (!this.started || !this.bot) return
+    if (!this.started) return
+    if (this.bot === undefined && this.ilinkChannel === undefined) return
     if (!isWechatSession(session.id)) return
     const subject = subjectFromSessionId(session.id)
     if (!subject) return
@@ -424,8 +597,7 @@ export class WechatBackend {
 
   /** 控制命令。 */
   private async handleCommand(subject: WechatSubject, command: ReturnType<typeof parseControlCommand>): Promise<void> {
-    const bot = this.bot
-    if (!bot) return
+    if (this.bot === undefined && this.ilinkChannel === undefined) return
     const targetId = subject.id
     const route = this.routeFor(subject)
     const key = String(route.sessionId)
@@ -563,11 +735,21 @@ export class WechatBackend {
 
   /** 回复微信：按配置分块发送文本。 */
   private async reply(targetId: string, text: string): Promise<void> {
+    const chunks = chunkForWechat(text, this.config.textChunkLimit)
+    const ilink = this.ilinkChannel
+    if (ilink !== undefined) {
+      const contextToken = this.contextTokens.get(targetId)
+      for (const chunk of chunks) {
+        if (chunk.trim()) {
+          await ilink.sendText(targetId, chunk, contextToken).catch((error: unknown) =>
+            this.log(`[wechat] iLink 发送失败: ${String(error)}`),
+          )
+        }
+      }
+      return
+    }
     const bot = this.bot
     if (!bot) return
-    await sendToRecipient(bot, targetId, {
-      chunks: chunkForWechat(text, this.config.textChunkLimit),
-      log: this.log,
-    })
+    await sendToRecipient(bot, targetId, { chunks, log: this.log })
   }
 }

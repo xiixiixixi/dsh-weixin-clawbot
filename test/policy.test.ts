@@ -13,7 +13,7 @@ describe('Config', () => {
   it('空配置使用默认值', () => {
     const config = Config({} as unknown as WechatConfig)
     expect(config.enabled).toBe(true)
-    expect(config.puppet).toBe('wechaty-puppet-wechat')
+    expect(config.puppet).toBe('ilink')
     expect(config.dmPolicy).toBe('pairing')
     expect(config.groupPolicy).toBe('allowlist')
     expect(config.groupRequireMention).toBe(true)

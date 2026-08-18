@@ -145,6 +145,20 @@ export function apply(ctx: Context, config: WechatConfig): void {
 
     webCtx.effect(() => webCtx.webServer.register({
       kind: 'exact',
+      path: '/wechat/verify',
+      handler: async (req: IncomingMessage, res: ServerResponse) => {
+        const body = (await readJsonBody(req)) as { code?: unknown } | undefined
+        if (typeof body?.code !== 'string' || body.code.trim() === '') {
+          jsonReply(res, 400, { ok: false, message: 'code 必须是非空字符串' })
+          return
+        }
+        backend.submitVerifyCode(body.code.trim())
+        jsonReply(res, 200, { ok: true })
+      },
+    } satisfies WebRoute), 'dsh-wechat: /wechat/verify route')
+
+    webCtx.effect(() => webCtx.webServer.register({
+      kind: 'exact',
       path: '/wechat/logout',
       handler: async (_req: IncomingMessage, res: ServerResponse) => {
         await backend.logout()
