@@ -1,222 +1,438 @@
 /**
- * dsh-wechat 的浏览器半部分：在侧边栏设置按钮旁注册一个微信入口，
- * 悬停显示连接状态提示，点击打开扫码窗口，轮询主机 `/wechat/qrcode`
- * 显示登录二维码与登录状态。
+ * dsh-wechat 的浏览器半部分：侧边栏「微信机器人」入口 + 配对管理弹窗。
+ *
+ * 弹窗对齐 zcode Bot Channel 微信管理页：关联机器人（扫码/解绑）、
+ * 回复颗粒度、工作区访问范围。轮询 GET /wechat/qrcode，
+ * 设置写入 POST /wechat/settings，解绑 POST /wechat/logout。
  *
  * @module dsh-wechat/client
  */
 
-import { useEffect, useState, type CSSProperties, type JSX } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 // 引入 ui-sidebar 的 SlotMap 声明合并与 footer action owner props 类型。
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import {
+  IconCheckOutline14,
+  IconChevronDownOutline14,
+  IconCloseOutline16,
+  IconCopyOutline16,
+  IconRightUpOutline14,
+  Menu,
+  Modal,
+  StateDot,
+  Tooltip,
+  writeClipboard,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+
 import type { WechatQrPayload } from '../backend.js'
-import { Modal, Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import cssText from './wechat.css'
+
+// 模块加载器在工厂执行后立即认领此时存在的无主 <style> 标签，
+// 因此注入必须发生在模块顶层（工厂体内）而不是 apply() 里。
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style')
+  style.setAttribute('data-plugin-css', 'dsh-wechat')
+  document.head.append(style)
+  style.textContent = cssText
+}
 
 /** Services required by the client plugin. */
 export const inject = ['slots']
 
-/** 扫码窗口轮询载荷（与主机 WechatQrPayload 一致）。 */
+/** 轮询载荷（与主机 WechatQrPayload 一致）。 */
 type QrPayload = WechatQrPayload
+type Granularity = QrPayload['settings']['granularity']
 
-const buttonStyle: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  color: 'var(--dsw-alias-label-secondary, #666)',
-  cursor: 'pointer',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 6,
-  fontSize: 14,
-  width: 36,
-  height: 36,
-  borderRadius: 10,
+const GRANULARITY_ITEMS: ReadonlyArray<{ id: Granularity; label: string }> = [
+  { id: 'detailed', label: '完整回复' },
+  { id: 'standard', label: '标准回复' },
+  { id: 'summary', label: '摘要回复' },
+]
+
+/** wechaty ScanStatus（0/1/2/3/4/5）→ 用户可读文案；不暴露状态码。 */
+function scanHint(status: number): string {
+  if (status === 3) return '已扫码，请在手机上确认'
+  if (status === 4) return '已确认，正在登录…'
+  if (status === 5 || status === 1) return '二维码已过期，正在获取新码…'
+  return '等待手机扫码'
 }
 
-const tooltipStyle: CSSProperties = {
-  position: 'absolute',
-  bottom: 'calc(100% + 8px)',
-  left: '50%',
-  transform: 'translateX(-50%)',
-  background: '#1f2937',
-  color: 'white',
-  borderRadius: 8,
-  padding: '6px 10px',
-  fontSize: 12,
-  whiteSpace: 'nowrap',
-  boxShadow: '0 4px 12px rgba(0,0,0,.15)',
-  zIndex: 1100,
-}
-
-/** 依据轮询状态给出一行简短的连接状态描述（用于入口 tooltip）。 */
-function statusLine(payload: QrPayload | null, error: string | null): string {
-  if (error !== null) return '连接中断'
-  if (payload === null) return '等待微信后端启动…'
+/** 整体状态：StateDot 语义 + 一行文案（状态行与入口 tooltip 共用）。 */
+function statusOf(
+  payload: QrPayload | null,
+  error: string | null,
+): { dot: 'done' | 'warning' | 'ongoing' | 'error'; text: string } {
+  if (error !== null) return { dot: 'error', text: '连接中断，正在重试…' }
+  if (payload === null) return { dot: 'ongoing', text: '微信后端启动中…' }
   switch (payload.state.kind) {
     case 'none':
-      return '等待手机连接'
+      return { dot: 'ongoing', text: '微信后端启动中…' }
     case 'scan':
-      return '等待扫码登录'
+      return { dot: 'ongoing', text: scanHint(payload.state.status) }
     case 'logged-in':
-      return '已连接'
+      return {
+        dot: 'done',
+        text: `已连通：${payload.user?.name ?? payload.state.userName}`,
+      }
   }
 }
 
-function QrModal(props: {
+/** 轮询 /wechat/qrcode；open 时 2s，否则 10s。 */
+function useQrPoll(open: boolean): {
+  payload: QrPayload | null
+  error: string | null
+  refresh: () => void
+} {
+  const [payload, setPayload] = useState<QrPayload | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+  const alive = useRef(true)
+
+  useEffect(() => {
+    alive.current = true
+    const poll = async () => {
+      try {
+        const response = await fetch('/wechat/qrcode', { cache: 'no-store' })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = (await response.json()) as QrPayload
+        if (alive.current) {
+          setPayload(data)
+          setError(null)
+        }
+      } catch (err) {
+        if (alive.current) setError(String(err))
+      }
+    }
+    void poll()
+    const timer = setInterval(() => void poll(), open ? 2000 : 10000)
+    return () => {
+      alive.current = false
+      clearInterval(timer)
+    }
+  }, [open, tick])
+
+  const refresh = useCallback(() => setTick((value) => value + 1), [])
+  return { payload, error, refresh }
+}
+
+async function postJson(path: string, body?: unknown): Promise<boolean> {
+  try {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+/** 设置行：左侧标题/描述，右侧控件。 */
+function SettingRow(props: { label: string; desc: string; children: JSX.Element }): JSX.Element {
+  return (
+    <div className="dsh-wechat-row">
+      <div className="dsh-wechat-row-text">
+        <div className="dsh-wechat-row-label">{props.label}</div>
+        <div className="dsh-wechat-row-desc">{props.desc}</div>
+      </div>
+      {props.children}
+    </div>
+  )
+}
+
+/** 下拉选择（dsh Menu primitive，portal 防弹窗裁剪）。 */
+function DropdownSelect(props: {
+  label: string
+  options: ReadonlyArray<{ id: string; label: string; desc?: string }>
+  value: string
+  onSelect: (id: string) => void
+  disabled?: boolean
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const selected = props.options.find((option) => option.id === props.value)
+  return (
+    <Menu
+      open={open}
+      onClose={() => setOpen(false)}
+      portal
+      align="end"
+      items={props.options.map((option) => ({
+        id: option.id,
+        label: option.desc !== undefined ? `${option.label}（${option.desc}）` : option.label,
+      }))}
+      selectedId={props.value}
+      onSelect={(id) => {
+        setOpen(false)
+        if (id !== props.value) props.onSelect(id)
+      }}
+      anchor={
+        <button
+          type="button"
+          className="dsh-wechat-select"
+          disabled={props.disabled}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span className="dsh-wechat-select-label">{selected?.label ?? props.label}</span>
+          <IconChevronDownOutline14 size={14} />
+        </button>
+      }
+    />
+  )
+}
+
+/** 配对管理弹窗主体（headless Modal：自绘 header/关闭钮，chrome 走 Modal）。 */
+function WechatDialog(props: {
   open: boolean
   onClose: () => void
   payload: QrPayload | null
   error: string | null
+  refresh: () => void
 }): JSX.Element {
-  let dotColor: string
-  let statusText: string
-  if (props.error !== null) {
-    dotColor = '#e5484d'
-    statusText = `连接中断：${props.error}`
-  } else if (props.payload === null) {
-    dotColor = '#d1d5db'
-    statusText = '等待微信后端启动…'
-  } else if (props.payload.state.kind === 'none') {
-    dotColor = '#d1d5db'
-    statusText = '等待手机连接'
-  } else if (props.payload.state.kind === 'scan') {
-    dotColor = '#f97316'
-    statusText = `等待扫码登录（状态 ${props.payload.state.status}）`
-  } else {
-    dotColor = '#30a46c'
-    statusText = `已连接：${props.payload.user?.name ?? props.payload.state.userName}`
+  const [copied, setCopied] = useState(false)
+  const status = statusOf(props.payload, props.error)
+  const state = props.payload?.state
+  const settings = props.payload?.settings
+  const workspaces = props.payload?.workspaces ?? []
+
+  const scopeValue =
+    settings !== undefined && settings.workspaceScope !== 'all'
+      ? settings.workspaceScope.workspaceId
+      : 'all'
+  const scopeOptions = [
+    { id: 'all', label: '所有工作区' },
+    ...workspaces.map((workspace) => ({
+      id: workspace.id,
+      label: workspace.title,
+      desc: workspace.path,
+    })),
+  ]
+
+  const copyLink = async () => {
+    if (props.payload?.url === undefined) return
+    if (await writeClipboard(props.payload.url)) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
-  const url = props.payload?.url
-  const footer = url ? (
-    <Button
-      variant="outline"
-      onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
-    >
-      在浏览器打开二维码
-    </Button>
-  ) : undefined
+  const updateSettings = async (patch: Record<string, unknown>) => {
+    if (await postJson('/wechat/settings', patch)) props.refresh()
+  }
 
   return (
-    <Modal open={props.open} onClose={props.onClose} title="微信" footer={footer}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          fontSize: 13,
-          color: '#666',
-          marginBottom: 12,
-        }}
-      >
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor }} />
-        <span>{statusText}</span>
-      </div>
-
-      {props.error === null && props.payload !== null && props.payload.state.kind === 'scan' && (
-        <>
-          {props.payload.state.png ? (
-            <img
-              src={props.payload.state.png}
-              alt="微信登录二维码"
-              style={{ width: 260, height: 260, borderRadius: 8, border: '1px solid #eee' }}
-            />
-          ) : (
-            <div style={{ width: 260, height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: 13 }}>
-              二维码生成中…
-            </div>
-          )}
-          <div style={{ fontSize: 12, color: '#888' }}>扫码后自动保存凭据。</div>
-        </>
-      )}
-
-      {props.error === null && props.payload !== null && props.payload.state.kind === 'logged-in' && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-          <div style={{ fontSize: 34 }}>✅</div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>已登录：{props.payload.user?.name ?? props.payload.state.userName}</div>
-          <div style={{ fontSize: 12, color: '#888' }}>{props.payload.state.userId}</div>
-          <div style={{ fontSize: 12, color: '#666' }}>
-            现在可以直接在微信里给机器人发消息了
+    <Modal
+      open={props.open}
+      onClose={props.onClose}
+      title="微信机器人"
+      closeLabel="关闭"
+      className="dsh-wechat-dialog"
+      headless
+    >
+      <div className="dsh-wechat-frame">
+        <div className="dsh-wechat-header">
+          <span className="dsh-wechat-logo" aria-hidden="true">
+            <WechatGlyph />
+          </span>
+          <div className="dsh-wechat-header-main">
+            <h2 className="dsh-wechat-title">微信机器人</h2>
+            <p className="dsh-wechat-subtitle">在微信里远程操控 DSH agent。</p>
           </div>
+          <button type="button" className="dsh-wechat-close" aria-label="关闭" onClick={props.onClose}>
+            <IconCloseOutline16 size={14} />
+          </button>
         </div>
-      )}
+
+        <div className="dsh-wechat-statusline">
+          <StateDot state={status.dot} />
+          <span>{status.text}</span>
+        </div>
+
+        <div className="dsh-wechat-section">
+          <div className="dsh-wechat-section-title">关联机器人</div>
+          <div className="dsh-wechat-section-desc">扫码后自动保存凭据。</div>
+
+          {state?.kind === 'scan' && (
+            <>
+              <div className="dsh-wechat-qr-card">
+                {state.png ? (
+                  <img className="dsh-wechat-qr-img" src={state.png} alt="微信登录二维码" />
+                ) : (
+                  <div
+                    className="dsh-wechat-qr-img"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#888',
+                      fontSize: 13,
+                    }}
+                  >
+                    二维码生成中…
+                  </div>
+                )}
+              </div>
+              <div className="dsh-wechat-qr-hint">{scanHint(state.status)}</div>
+              {props.payload?.url !== undefined && (
+                <div className="dsh-wechat-linkrow">
+                  <span>无法扫码？在手机浏览器打开链接</span>
+                  <button type="button" className="dsh-wechat-linkbtn" onClick={() => void copyLink()}>
+                    {copied ? <IconCheckOutline14 size={14} /> : <IconCopyOutline16 size={14} />}
+                    {copied ? '已复制' : '复制'}
+                  </button>
+                  <a
+                    className="dsh-wechat-linkbtn"
+                    href={props.payload.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <IconRightUpOutline14 size={14} />
+                  </a>
+                </div>
+              )}
+            </>
+          )}
+
+          {state?.kind === 'logged-in' && (
+            <>
+              <div className="dsh-wechat-connected">
+                <StateDot state="done" />
+                <div className="dsh-wechat-connected-main">
+                  <span className="dsh-wechat-connected-name">
+                    {props.payload?.user?.name ?? state.userName}
+                  </span>
+                  <span className="dsh-wechat-connected-id">{state.userId}</span>
+                </div>
+                <button
+                  type="button"
+                  className="dsh-wechat-select"
+                  onClick={() => {
+                    void postJson('/wechat/logout').then(props.refresh)
+                  }}
+                >
+                  解绑
+                </button>
+              </div>
+              <div className="dsh-wechat-note">
+                <span aria-hidden="true">ⓘ</span>
+                <span>请在微信里向机器人发送任意消息；首次消息会收到欢迎和帮助。</span>
+              </div>
+            </>
+          )}
+
+          {(state === undefined || state.kind === 'none') && (
+            <div className="dsh-wechat-qr-hint">等待微信后端就绪后显示二维码…</div>
+          )}
+        </div>
+
+        <div className="dsh-wechat-section">
+          <div className="dsh-wechat-section-title">机器人回复颗粒度</div>
+          <SettingRow label="消息详细程度" desc="控制机器人回复的详细程度。">
+            <DropdownSelect
+              label="标准回复"
+              options={GRANULARITY_ITEMS}
+              value={settings?.granularity ?? 'standard'}
+              disabled={settings === undefined}
+              onSelect={(id) => {
+                void updateSettings({ granularity: id })
+              }}
+            />
+          </SettingRow>
+        </div>
+
+        <div className="dsh-wechat-section">
+          <div className="dsh-wechat-section-title">工作区访问范围</div>
+          <SettingRow label="可用工作区" desc="限制机器人可以在哪些工作区里工作。">
+            <DropdownSelect
+              label="所有工作区"
+              options={scopeOptions}
+              value={scopeValue}
+              disabled={settings === undefined}
+              onSelect={(id) => {
+                void updateSettings({
+                  workspaceScope: id === 'all' ? 'all' : { workspaceId: id },
+                })
+              }}
+            />
+          </SettingRow>
+        </div>
+
+        {props.payload?.puppet !== undefined && (
+          <div className="dsh-wechat-footer-cap">后端：{props.payload.puppet}</div>
+        )}
+      </div>
     </Modal>
+  )
+}
+
+/** 微信 logo 描边图形（白色，放在品牌绿底上）。 */
+function WechatGlyph(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <path d="M8.5 5.5c-3.6 0-6.5 2.4-6.5 5.4 0 1.7.9 3.2 2.4 4.2l-.6 2.1 2.4-1.2c.7.2 1.5.3 2.3.3h.4a5.5 5.5 0 0 1-.2-1.5c0-3 2.9-5.4 6.4-5.4h.5C15.9 7.2 12.5 5.5 8.5 5.5Z" />
+      <path d="M15.9 9.5c-3.3 0-6 2.2-6 4.9s2.7 4.9 6 4.9c.7 0 1.3-.1 1.9-.3l2.1 1-.5-1.8c1.3-.9 2.5-2.2 2.5-3.8 0-2.7-2.7-4.9-6-4.9Z" />
+    </svg>
+  )
+}
+
+/** 手机图标（入口用，currentColor）。 */
+function PhoneGlyph(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
+      <line x1="11" y1="18" x2="13" y2="18" />
+    </svg>
   )
 }
 
 /** 侧边栏 footer 的微信入口：rail 显示图标，wide 显示图标 + 文字。 */
 function WechatFooterAction(props: SidebarFooterActionOwnerProps): JSX.Element {
   const [open, setOpen] = useState(false)
-  const [hover, setHover] = useState(false)
-  const [payload, setPayload] = useState<QrPayload | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    const poll = async () => {
-      try {
-        const response = await fetch('/wechat/qrcode', { cache: 'no-store' })
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        const data = (await response.json()) as QrPayload
-        if (alive) {
-          setPayload(data)
-          setError(null)
-        }
-      } catch (err) {
-        if (alive) setError(String(err))
-      }
-    }
-    void poll()
-    const timer = setInterval(() => void poll(), open ? 2000 : 10000)
-    return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [open])
+  const { payload, error, refresh } = useQrPoll(open)
+  const status = statusOf(payload, error)
+  const connected = payload?.state.kind === 'logged-in'
 
   return (
     <>
-      <div
-        style={{ position: 'relative', display: 'inline-flex' }}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-      >
+      <Tooltip label={`微信机器人 · ${status.text}`} side="right" delayMs={300}>
         <button
-          style={buttonStyle}
-          title="微信"
+          type="button"
+          className={`dsh-wechat-entry${props.wide ? ' dsh-wechat-entry-wide' : ''}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
           onClick={() => setOpen(true)}
-          onMouseEnter={(event) => {
-            event.currentTarget.style.background = 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.05))'
-          }}
-          onMouseLeave={(event) => {
-            event.currentTarget.style.background = 'transparent'
-          }}
         >
-          <svg
-            viewBox="0 0 24 24"
-            width="18"
-            height="18"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            style={{ color: '#f97316' }}
-          >
-            <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
-            <line x1="11" y1="18" x2="13" y2="18" />
-          </svg>
+          <PhoneGlyph />
           {props.wide && <span>微信</span>}
+          {connected && <span className="dsh-wechat-badge" aria-hidden="true" />}
         </button>
-        {hover && (
-          <div style={tooltipStyle}>
-            <div style={{ fontWeight: 700 }}>移动端远程控制</div>
-            <div style={{ color: '#d1d5db' }}>{statusLine(payload, error)}</div>
-          </div>
-        )}
-      </div>
-      <QrModal open={open} onClose={() => setOpen(false)} payload={payload} error={error} />
+      </Tooltip>
+      <WechatDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        payload={payload}
+        error={error}
+        refresh={refresh}
+      />
     </>
   )
 }

@@ -28,6 +28,15 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* 宽侧栏：与设置行一致的 34px 圆角行 */
+.dsh-wechat-entry-wide {
+  width: auto;
+  height: 34px;
+  margin: 4px -4px 4px;
+  padding: 0 10px;
+  border-radius: 12px;
+}
+
 /* 连通角标：图标右下角 8px 绿点 */
 .dsh-wechat-badge {
   position: absolute;
@@ -46,10 +55,41 @@
   width: min(420px, 100%);
 }
 
+/* headless 模式自绘 frame：左右 24 / 上 22 的内容边距 */
+.dsh-wechat-frame {
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px 0;
+}
+
+/* 自绘关闭钮（对齐 Modal 默认 header 的 close 规格） */
+.dsh-wechat-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dsh-wechat-close:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .dsh-wechat-header {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.dsh-wechat-header-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .dsh-wechat-logo {
