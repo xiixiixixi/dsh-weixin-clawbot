@@ -1,0 +1,287 @@
+/*
+ * dsh-wechat 弹窗与侧边栏入口样式。
+ * 颜色/字体全部走 --dsw-alias-* 令牌（深浅色自动适配）；
+ * 唯二硬编码色：微信品牌绿 #07C160（logo）与二维码白底（可扫性要求）。
+ */
+
+/* ── 侧边栏入口 ─────────────────────────────────────────── */
+
+.dsh-wechat-entry {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+}
+
+.dsh-wechat-entry:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 连通角标：图标右下角 8px 绿点 */
+.dsh-wechat-badge {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-1);
+}
+
+/* ── 弹窗（挂 Modal className，卡片从 380 扩到 420） ─────── */
+
+.dsh-wechat-dialog {
+  width: min(420px, 100%);
+}
+
+.dsh-wechat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dsh-wechat-logo {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: #07c160; /* 微信品牌绿 */
+  color: #fff;
+}
+
+.dsh-wechat-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-wechat-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* 状态行：StateDot + 文案 */
+.dsh-wechat-statusline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* ── 分区（关联机器人 / 颗粒度 / 工作区范围） ────────────── */
+
+.dsh-wechat-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dsh-wechat-section-title {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-wechat-section-desc {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* ── 二维码卡片 ─────────────────────────────────────────── */
+
+.dsh-wechat-qr-card {
+  align-self: center;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: #fff; /* 二维码可扫性要求白底 */
+}
+
+.dsh-wechat-qr-img {
+  display: block;
+  width: 220px;
+  height: 220px;
+}
+
+.dsh-wechat-qr-hint {
+  align-self: center;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 「无法扫码？」链接行 */
+.dsh-wechat-linkrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dsh-wechat-linkbtn {
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+}
+
+.dsh-wechat-linkbtn:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+}
+
+/* ── 已连通 ─────────────────────────────────────────────── */
+
+.dsh-wechat-connected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.dsh-wechat-connected-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dsh-wechat-connected-name {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-wechat-connected-id {
+  font-size: 12px;
+  line-height: 18px;
+  font-family: var(--ds-font-family-code);
+  color: var(--dsw-alias-label-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 首条消息提示框 */
+.dsh-wechat-note {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* ── 设置行（标题/描述 左，控件 右） ───────────────────── */
+
+.dsh-wechat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.dsh-wechat-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.dsh-wechat-row-label {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dsh-wechat-row-desc {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 下拉触发按钮（Menu 的 anchor） */
+.dsh-wechat-select {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 200px;
+}
+
+.dsh-wechat-select:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dsh-wechat-select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.dsh-wechat-select-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 底部 caption：puppet 名 */
+.dsh-wechat-footer-cap {
+  margin-top: 16px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-dimmed, var(--dsw-alias-label-tertiary));
+  text-align: center;
+}
