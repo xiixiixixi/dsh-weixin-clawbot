@@ -1,5 +1,6 @@
-# 追加到 $DSH_HOME/profiles/<profile>/cordis.patch.yml 的完整示例。
-# 说明：cordis.patch.yml 是 profile 的用户补丁层，insert 会把条目追加进组合树。
+# 覆盖默认配置的示例：安装即用无需任何配置（默认值随包分发），
+# 只有想改策略/白名单/后端时才把本文件内容按需裁剪后
+# 追加到 $DSH_HOME/profiles/<profile>/cordis.patch.yml（用户层覆盖插件自带层）。
 - insert:
     - id: wechat
       name: dsh-weixin-clawbot

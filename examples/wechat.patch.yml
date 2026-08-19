@@ -1,7 +1,0 @@
-# 冒烟 patch：叠加到 web profile 上，把 dsh-weixin-clawbot 挂进组合。
-# 用法: dsh --profile web --patch <本文件> [--port 31789]
-- id: wechat
-  name: /Users/weixili/git/dsh-weixin-clawbot
-  config:
-    puppet: '@juzi/wechaty-puppet-service'
-    puppetOptions: {}
