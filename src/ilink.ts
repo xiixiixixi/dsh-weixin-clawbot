@@ -337,6 +337,7 @@ export class IlinkChannel {
     if (response.ret !== 0 && response.ret !== undefined) {
       throw new Error(`iLink sendmessage 失败: ret=${response.ret} ${response.errmsg ?? ''}`)
     }
+    this.log(`[wechat] iLink 已回复 ${toUserId}（${text.length} 字）`)
   }
 
   private botAgentHeaderValue(): string {
