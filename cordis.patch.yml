@@ -1,0 +1,12 @@
+# dsh-weixin-clawbot 自带的组合层（bundle patch）。
+# 安装即生效，无需手写任何配置；要覆盖默认值，写在 profile 的
+# cordis.patch.yml（用户层叠加在本层之上）。
+- insert:
+    - id: wechat
+      name: dsh-weixin-clawbot
+      config:
+        puppet: ilink          # 微信官方机器人通道（iLink）
+        dmPolicy: open          # 能和机器人对话的人即可用；收紧改 pairing/allowlist
+        groupPolicy: allowlist
+        groups: []
+        # workspace 不设 = dsh 启动目录；推荐装好后在 Web 弹窗勾选工作区

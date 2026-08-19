@@ -19,7 +19,8 @@
   "files": [
     "lib",
     "README.md",
-    "examples"
+    "examples",
+    "cordis.patch.yml"
   ],
   "scripts": {
     "build": "npm run build:host && npm run build:client",
@@ -80,6 +81,9 @@
     "vitest": "^3.2.0"
   },
   "dsh": {
+    "bundle": {
+      "patch": "cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [
