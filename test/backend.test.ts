@@ -344,6 +344,39 @@ describe('WechatBackend 运行时设置', () => {
     expect(subjectFromSessionId('wechat:direct:wxid_abc#w1')).toEqual({ kind: 'direct', id: 'wxid_abc' })
     expect(String(sessionIdFor({ kind: 'direct', id: 'wxid_abc' }, 'w1'))).toBe('wechat:direct:wxid_abc#w1')
     expect(String(sessionIdFor({ kind: 'group', id: 'r@chatroom' }))).toBe('wechat:group:r@chatroom')
+    expect(subjectFromSessionId('wechat:direct:wxid_abc#w1~abc123')).toEqual({ kind: 'direct', id: 'wxid_abc' })
+  })
+
+  it('持久化会话用 seed 接管（同 id 不再 collision）；/new 铸造全新 id', async () => {
+    const { ctx } = makeContext()
+    const backend = new WechatBackend(ctx, makeConfig(), tempStateFile())
+    const persistedEvents = [
+      { seq: 0, type: 'user/message', data: {} },
+      { seq: 1, type: 'assistant/message', data: {} },
+    ]
+    backend.setSessionPersistence({
+      inspect: vi.fn(async (id: unknown) => {
+        if (String(id).includes('~')) throw new Error(`session "${String(id)}" not found`)
+        return { meta: { cwd: '/persisted-cwd' }, events: persistedEvents }
+      }) as never,
+    })
+    await backend.start()
+    const onMessage = fakeBot.handlers.get('message')
+    const send = (m: unknown) => (onMessage as (m: never) => Promise<void>)(m as never)
+
+    await send(makeMessage())
+    const first = (ctx.agents.create as Mock).mock.calls[0][0]
+    expect(first.seed).toEqual(persistedEvents)
+    expect(first.meta.cwd).toBe('/persisted-cwd')
+
+    // /new → 下条消息用带 ~ 后缀的全新 id，不再接管历史
+    await send(makeMessage({ text: () => '/new' }))
+    await send(makeMessage({ text: () => '第二条' }))
+    const second = (ctx.agents.create as Mock).mock.calls[1][0]
+    expect(String(second.sessionId)).toMatch(/~[0-9a-z]+$/)
+    expect(second.seed).toBeUndefined()
+
+    await backend.dispose()
   })
 
   it('workspacesProjection 无注册表时为空数组', () => {
