@@ -14,12 +14,18 @@
 ### 一键安装（GitHub）
 
 ```bash
+# 1. 安装（git 源；pnpm 会拦构建脚本属正常提示，继续第 2 步）
+dsh plugin --profile web add github:xiixiixixi/dsh-wechat
+
+# 2. 放行构建脚本（一次性）：编辑 $DSH_HOME/profiles/web/pnpm-workspace.yaml，加上
+#    onlyBuiltDependencies:
+#      - dsh-wechat
+
+# 3. 重跑第 1 步，prepare 自动编译出 lib/
 dsh plugin --profile web add github:xiixiixixi/dsh-wechat
 ```
 
-> git 源安装时 pnpm 会运行 `prepare` 脚本编译 `lib/`。若 pnpm 提示构建被
-> 阻止（allowBuilds），按提示把对应 key 加进 profile 的 `pnpm-workspace.yaml`
-> 后重跑即可。本地开发则用路径安装：`dsh plugin --profile web add /path/to/dsh-wechat`。
+本地开发用路径安装：`dsh plugin --profile web add /path/to/dsh-wechat`（link 方式，改代码 `npm run build` 后即生效）。
 
 装完后把它插进组合（见下）。
 
