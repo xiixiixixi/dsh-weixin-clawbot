@@ -14,7 +14,11 @@
 ### 一键安装（GitHub）
 
 ```bash
+# 已全局安装 dsh：
 dsh plugin --profile web add github:xiixiixixi/dsh-weixin-clawbot
+
+# 或用 npx（无需全局安装）：
+npx -y @deepseek-ai/dsh plugin --profile web add github:xiixiixixi/dsh-weixin-clawbot
 ```
 
 仓库自带编译好的 `lib/`，无构建步骤、无 pnpm 放行，一条命令装完即用。
