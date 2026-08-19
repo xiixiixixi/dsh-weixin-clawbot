@@ -21,7 +21,13 @@ dsh plugin --profile web add github:xiixiixixi/dsh-weixin-clawbot
 npx -y @deepseek-ai/dsh plugin --profile web add github:xiixiixixi/dsh-weixin-clawbot
 ```
 
-仓库自带编译好的 `lib/`，无构建步骤、无 pnpm 放行，一条命令装完即用。
+然后启动 `dsh web`，就绪。**不需要手写任何配置**：插件声明了 `dsh.bundle`，
+安装时自动加入 profile 组合层，默认配置随包分发（ilink 官方通道、open 策略）；
+仓库自带编译好的 `lib/`，无构建步骤、无 pnpm 放行。
+
+要覆盖默认值（换策略、限定白名单等）才需要写 profile 的 `cordis.patch.yml`
+（用户层叠加在插件自带层之上），示例见 [examples/cordis.patch.example.yml](examples/cordis.patch.example.yml)；
+工作区建议装好后直接在 Web 弹窗勾选，不必配置 `workspace`。
 
 本地开发用路径安装：`dsh plugin --profile web add /path/to/dsh-weixin-clawbot`（link 方式，改代码 `npm run build` 后即生效）。
 
