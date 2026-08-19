@@ -26,7 +26,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "build:host": "tsc -p tsconfig.build.json",
-    "build:client": "node scripts/build-client.mjs"
+    "build:client": "node scripts/build-client.mjs",
+    "prepare": "npm run build"
   },
   "keywords": [
     "deepseek-harness",

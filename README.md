@@ -11,6 +11,20 @@
 
 ## 安装
 
+### 一键安装（GitHub）
+
+```bash
+dsh plugin --profile web add github:weixili/dsh-wechat
+```
+
+> git 源安装时 pnpm 会运行 `prepare` 脚本编译 `lib/`。若 pnpm 提示构建被
+> 阻止（allowBuilds），按提示把对应 key 加进 profile 的 `pnpm-workspace.yaml`
+> 后重跑即可。本地开发则用路径安装：`dsh plugin --profile web add /path/to/dsh-wechat`。
+
+装完后把它插进组合（见下）。
+
+### 从源码/本地路径
+
 插件是一个普通 Cordis 插件包。先装进 DSH profile，再把它插进组合：
 
 ```bash
