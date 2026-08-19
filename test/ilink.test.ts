@@ -152,6 +152,27 @@ describe('IlinkChannel 消息循环与发送', () => {
     return new IlinkChannel({ stateFile: file, fetchImpl: makeFetch(responder, calls) })
   }
 
+  it('getupdates 端点带 ilink/bot 前缀，循环启动前先 notifyStart', async () => {
+    const file = stateFile()
+    const calls: Call[] = []
+    let round = 0
+    const channel = loggedInChannel(file, (url, method) => {
+      if (url.includes('notifystart') && method === 'POST') return { ret: 0 }
+      if (url.includes('getupdates') && method === 'POST') {
+        round += 1
+        if (round === 2) channel.stop()
+        return { ret: 0, msgs: [] }
+      }
+      return {}
+    }, calls)
+
+    await channel.runMessageLoop(() => {})
+
+    const order = calls.map((call) => call.url.includes('notifystart') ? 'start' : 'updates')
+    expect(order[0]).toBe('start')
+    expect(calls.find((call) => call.url.includes('getupdates'))?.url).toContain('ilink/bot/getupdates')
+  })
+
   it('getupdates 游标推进 + 消息归一化（群/私聊/语音/媒体/忽略 BOT 消息）', async () => {
     const file = stateFile()
     const calls: Call[] = []
@@ -196,8 +217,9 @@ describe('IlinkChannel 消息循环与发送', () => {
       { fromUserId: 'u2', groupId: 'g1', text: '语音转写', mediaNote: undefined, contextToken: undefined },
       { fromUserId: 'u3', groupId: undefined, text: '', mediaNote: '[图片]', contextToken: undefined },
     ])
-    expect(calls[0]?.body).toMatchObject({ get_updates_buf: '' })
-    expect(calls[1]?.body).toMatchObject({ get_updates_buf: 'BUF-1' })
+    // 游标携带（calls[0] = notifyStart，其后是 getupdates）
+    expect(calls[1]?.body).toMatchObject({ get_updates_buf: '' })
+    expect(calls[2]?.body).toMatchObject({ get_updates_buf: 'BUF-1' })
   })
 
   it('sendText 携带鉴权头与 context_token；ret 非 0 抛错', async () => {
@@ -213,6 +235,7 @@ describe('IlinkChannel 消息循环与发送', () => {
     expect(calls[0]?.headers?.Authorization).toBe('Bearer tok-9')
     expect(calls[0]?.headers?.AuthorizationType).toBe('ilink_bot_token')
     expect(calls[0]?.headers?.['iLink-App-Id']).toBe('bot')
+    expect(calls[0]?.url).toContain('ilink/bot/sendmessage')
     expect((calls[0]?.body as { msg: Record<string, unknown> }).msg).toMatchObject({
       to_user_id: 'u1',
       message_type: 2,

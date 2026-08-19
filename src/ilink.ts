@@ -230,11 +230,26 @@ export class IlinkChannel {
     this.running = true
     this.log(`[wechat] iLink 消息循环启动（网关: ${credentials.baseUrl}）`)
 
+    // 官方协议要求客户端启动时通知服务端，消息路由才会建立（失败不阻断）
+    try {
+      const start = await this.postJson(
+        credentials.baseUrl,
+        'ilink/bot/msg/notifystart',
+        { base_info: { bot_agent: this.botAgentHeaderValue() } },
+        { token: true, timeoutMs: 15_000 },
+      ) as { ret?: number; errmsg?: string }
+      if (start.ret !== 0 && start.ret !== undefined) {
+        this.log(`[wechat] iLink notifyStart: ret=${start.ret} ${start.errmsg ?? ''}`)
+      }
+    } catch (error) {
+      this.log(`[wechat] iLink notifyStart 失败（忽略）: ${String(error)}`)
+    }
+
     while (this.running && this.credentials !== undefined) {
       try {
         const response = await this.postJson(
           credentials.baseUrl,
-          'getupdates',
+          'ilink/bot/getupdates',
           { get_updates_buf: this.updatesBuf, base_info: { bot_agent: this.botAgentHeaderValue() } },
           { token: true, timeoutMs: 70_000 },
         ) as {
@@ -259,7 +274,11 @@ export class IlinkChannel {
           this.updatesBuf = response.get_updates_buf
         }
 
-        for (const msg of response.msgs ?? []) {
+        const msgs = response.msgs ?? []
+        if (msgs.length > 0) {
+          this.log(`[wechat] iLink 收到 ${msgs.length} 条消息（cursor ${this.updatesBuf.length}B）`)
+        }
+        for (const msg of msgs) {
           const inbound = normalizeInbound(msg)
           if (inbound) {
             try {
@@ -279,8 +298,19 @@ export class IlinkChannel {
     this.log('[wechat] iLink 消息循环已停止')
   }
 
-  /** 停止消息循环（不断开凭据）。 */
+  /** 停止消息循环（不断开凭据）；best-effort 通知服务端。 */
   stop(): void {
+    if (this.running) {
+      const credentials = this.credentials
+      if (credentials) {
+        void this.postJson(
+          credentials.baseUrl,
+          'ilink/bot/msg/notifystop',
+          { base_info: { bot_agent: this.botAgentHeaderValue() } },
+          { token: true, timeoutMs: 5000 },
+        ).catch(() => {})
+      }
+    }
     this.running = false
   }
 
@@ -290,7 +320,7 @@ export class IlinkChannel {
     if (!credentials) throw new Error('iLink 未登录，无法发送消息')
     const response = await this.postJson(
       credentials.baseUrl,
-      'sendmessage',
+      'ilink/bot/sendmessage',
       {
         msg: {
           from_user_id: '',

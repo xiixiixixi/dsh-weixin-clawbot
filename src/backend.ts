@@ -112,7 +112,11 @@ export class WechatBackend {
     private readonly config: WechatConfig,
     stateFile: string = resolveStatePath(),
   ) {
-    this.log = (message: string) => this.ctx.logger.info(message)
+    // 双写：cordis logger 之外同时落 stderr，nohup/终端都能看到 [wechat] 日志
+    this.log = (message: string) => {
+      this.ctx.logger.info(message)
+      console.error(message)
+    }
     this.stateFile = stateFile
   }
 
