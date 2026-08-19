@@ -14,16 +14,10 @@
 ### 一键安装（GitHub）
 
 ```bash
-# 1. 安装（git 源；pnpm 会拦构建脚本属正常提示，继续第 2 步）
-dsh plugin --profile web add github:xiixiixixi/dsh-weixin-clawbot
-
-# 2. 放行构建脚本（一次性）：编辑 $DSH_HOME/profiles/web/pnpm-workspace.yaml，加上
-#    onlyBuiltDependencies:
-#      - dsh-weixin-clawbot
-
-# 3. 重跑第 1 步，prepare 自动编译出 lib/
 dsh plugin --profile web add github:xiixiixixi/dsh-weixin-clawbot
 ```
+
+仓库自带编译好的 `lib/`，无构建步骤、无 pnpm 放行，一条命令装完即用。
 
 本地开发用路径安装：`dsh plugin --profile web add /path/to/dsh-weixin-clawbot`（link 方式，改代码 `npm run build` 后即生效）。
 

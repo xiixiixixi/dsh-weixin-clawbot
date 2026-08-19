@@ -1,6 +1,6 @@
 node_modules/
-lib/
 .DS_Store
+docs/
 *.log
 .omo/
 .playwright-mcp/

@@ -27,7 +27,7 @@
     "test": "vitest run",
     "build:host": "tsc -p tsconfig.build.json",
     "build:client": "node scripts/build-client.mjs",
-    "prepare": "npm run build"
+    "prepack": "npm run build"
   },
   "keywords": [
     "deepseek-harness",
