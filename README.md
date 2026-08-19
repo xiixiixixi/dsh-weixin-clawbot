@@ -14,7 +14,7 @@
 ### 一键安装（GitHub）
 
 ```bash
-dsh plugin --profile web add github:weixili/dsh-wechat
+dsh plugin --profile web add github:xiixiixixi/dsh-wechat
 ```
 
 > git 源安装时 pnpm 会运行 `prepare` 脚本编译 `lib/`。若 pnpm 提示构建被

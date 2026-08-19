@@ -88,5 +88,10 @@
         "@deepseek-ai/dsh-client-ui-sidebar"
       ]
     }
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiixiixixi/dsh-wechat.git"
+  },
+  "author": "weixi li"
 }
