@@ -1,11 +1,11 @@
 /**
- * dsh-wechat 的浏览器半部分：侧边栏「微信机器人」入口 + 配对管理弹窗。
+ * dsh-weixin-clawbot 的浏览器半部分：侧边栏「微信机器人」入口 + 配对管理弹窗。
  *
  * 弹窗对齐 zcode Bot Channel 微信管理页：关联机器人（扫码/解绑）、
  * 回复颗粒度、工作区访问范围。轮询 GET /wechat/qrcode，
  * 设置写入 POST /wechat/settings，解绑 POST /wechat/logout。
  *
- * @module dsh-wechat/client
+ * @module dsh-weixin-clawbot/client
  */
 
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
@@ -34,7 +34,7 @@ import cssText from './wechat.css'
 // 因此注入必须发生在模块顶层（工厂体内）而不是 apply() 里。
 if (typeof document !== 'undefined') {
   const style = document.createElement('style')
-  style.setAttribute('data-plugin-css', 'dsh-wechat')
+  style.setAttribute('data-plugin-css', 'dsh-weixin-clawbot')
   document.head.append(style)
   style.textContent = cssText
 }
@@ -134,10 +134,10 @@ async function postJson(path: string, body?: unknown): Promise<boolean> {
 /** 设置行：左侧标题/描述，右侧控件。 */
 function SettingRow(props: { label: string; desc: string; children: JSX.Element }): JSX.Element {
   return (
-    <div className="dsh-wechat-row">
-      <div className="dsh-wechat-row-text">
-        <div className="dsh-wechat-row-label">{props.label}</div>
-        <div className="dsh-wechat-row-desc">{props.desc}</div>
+    <div className="dsh-weixin-clawbot-row">
+      <div className="dsh-weixin-clawbot-row-text">
+        <div className="dsh-weixin-clawbot-row-label">{props.label}</div>
+        <div className="dsh-weixin-clawbot-row-desc">{props.desc}</div>
       </div>
       {props.children}
     </div>
@@ -172,11 +172,11 @@ function DropdownSelect(props: {
       anchor={
         <button
           type="button"
-          className="dsh-wechat-select"
+          className="dsh-weixin-clawbot-select"
           disabled={props.disabled}
           onClick={() => setOpen((value) => !value)}
         >
-          <span className="dsh-wechat-select-label">{selected?.label ?? props.label}</span>
+          <span className="dsh-weixin-clawbot-select-label">{selected?.label ?? props.label}</span>
           <IconChevronDownOutline14 size={14} />
         </button>
       }
@@ -207,24 +207,24 @@ function WorkspaceScopeList(props: {
     <button
       key={props2.key}
       type="button"
-      className="dsh-wechat-check-row"
+      className="dsh-weixin-clawbot-check-row"
       disabled={props.disabled}
       role="menuitemcheckbox"
       aria-checked={props2.checked}
       onClick={props2.onToggle}
     >
-      <span className="dsh-wechat-check-box" data-checked={props2.checked}>
+      <span className="dsh-weixin-clawbot-check-box" data-checked={props2.checked}>
         {props2.checked && <IconCheckOutline14 size={12} />}
       </span>
-      <span className="dsh-wechat-check-text">
-        <span className="dsh-wechat-check-title">{props2.title}</span>
-        {props2.path !== undefined && <span className="dsh-wechat-check-path">{props2.path}</span>}
+      <span className="dsh-weixin-clawbot-check-text">
+        <span className="dsh-weixin-clawbot-check-title">{props2.title}</span>
+        {props2.path !== undefined && <span className="dsh-weixin-clawbot-check-path">{props2.path}</span>}
       </span>
     </button>
   )
 
   return (
-    <div className="dsh-wechat-check-list" role="group" aria-label="工作区访问范围">
+    <div className="dsh-weixin-clawbot-check-list" role="group" aria-label="工作区访问范围">
       {row({
         key: 'all',
         checked: isAll,
@@ -243,7 +243,7 @@ function WorkspaceScopeList(props: {
         }),
       )}
       {props.workspaces.length === 0 && (
-        <div className="dsh-wechat-check-empty">DSH 里还没有已注册的工作区。</div>
+        <div className="dsh-weixin-clawbot-check-empty">DSH 里还没有已注册的工作区。</div>
       )}
     </div>
   )
@@ -256,7 +256,7 @@ function VerifyCodeRow(props: { state: 'needed' | 'wrong' | 'blocked' }): JSX.El
 
   if (props.state === 'blocked') {
     return (
-      <div className="dsh-wechat-note">
+      <div className="dsh-weixin-clawbot-note">
         <span aria-hidden="true">⛔</span>
         <span>配对码多次输入错误，请稍后等二维码自动刷新后重试。</span>
       </div>
@@ -264,12 +264,12 @@ function VerifyCodeRow(props: { state: 'needed' | 'wrong' | 'blocked' }): JSX.El
   }
 
   return (
-    <div className="dsh-wechat-verify">
-      <span className="dsh-wechat-verify-label">
+    <div className="dsh-weixin-clawbot-verify">
+      <span className="dsh-weixin-clawbot-verify-label">
         {props.state === 'wrong' ? '❌ 配对码不正确，请重新输入：' : '输入手机微信上显示的数字，完成配对：'}
       </span>
       <input
-        className="dsh-wechat-verify-input"
+        className="dsh-weixin-clawbot-verify-input"
         value={code}
         inputMode="numeric"
         autoFocus
@@ -284,7 +284,7 @@ function VerifyCodeRow(props: { state: 'needed' | 'wrong' | 'blocked' }): JSX.El
       />
       <button
         type="button"
-        className="dsh-wechat-select"
+        className="dsh-weixin-clawbot-select"
         disabled={code.trim() === '' || busy}
         onClick={() => {
           setBusy(true)
@@ -354,40 +354,40 @@ function WechatDialog(props: {
       onClose={props.onClose}
       title="微信机器人"
       closeLabel="关闭"
-      className="dsh-wechat-dialog"
+      className="dsh-weixin-clawbot-dialog"
       headless
     >
-      <div className="dsh-wechat-frame">
-        <div className="dsh-wechat-header">
-          <span className="dsh-wechat-logo" aria-hidden="true">
+      <div className="dsh-weixin-clawbot-frame">
+        <div className="dsh-weixin-clawbot-header">
+          <span className="dsh-weixin-clawbot-logo" aria-hidden="true">
             <WechatGlyph />
           </span>
-          <div className="dsh-wechat-header-main">
-            <h2 className="dsh-wechat-title">微信机器人</h2>
-            <p className="dsh-wechat-subtitle">在微信里远程操控 DSH agent。</p>
+          <div className="dsh-weixin-clawbot-header-main">
+            <h2 className="dsh-weixin-clawbot-title">微信机器人</h2>
+            <p className="dsh-weixin-clawbot-subtitle">在微信里远程操控 DSH agent。</p>
           </div>
-          <button type="button" className="dsh-wechat-close" aria-label="关闭" onClick={props.onClose}>
+          <button type="button" className="dsh-weixin-clawbot-close" aria-label="关闭" onClick={props.onClose}>
             <IconCloseOutline16 size={14} />
           </button>
         </div>
 
-        <div className="dsh-wechat-statusline">
+        <div className="dsh-weixin-clawbot-statusline">
           <StateDot state={status.dot} />
           <span>{status.text}</span>
         </div>
 
-        <div className="dsh-wechat-section">
-          <div className="dsh-wechat-section-title">关联机器人</div>
-          <div className="dsh-wechat-section-desc">扫码后自动保存凭据。</div>
+        <div className="dsh-weixin-clawbot-section">
+          <div className="dsh-weixin-clawbot-section-title">关联机器人</div>
+          <div className="dsh-weixin-clawbot-section-desc">扫码后自动保存凭据。</div>
 
           {state?.kind === 'scan' && (
             <>
-              <div className="dsh-wechat-qr-card">
+              <div className="dsh-weixin-clawbot-qr-card">
                 {state.png ? (
-                  <img className="dsh-wechat-qr-img" src={state.png} alt="微信登录二维码" />
+                  <img className="dsh-weixin-clawbot-qr-img" src={state.png} alt="微信登录二维码" />
                 ) : (
                   <div
-                    className="dsh-wechat-qr-img"
+                    className="dsh-weixin-clawbot-qr-img"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -400,17 +400,17 @@ function WechatDialog(props: {
                   </div>
                 )}
               </div>
-              <div className="dsh-wechat-qr-hint">{scanHint(state.status)}</div>
+              <div className="dsh-weixin-clawbot-qr-hint">{scanHint(state.status)}</div>
               {state.verifyCode !== undefined && <VerifyCodeRow state={state.verifyCode} />}
               {props.payload?.url !== undefined && state.verifyCode === undefined && (
-                <div className="dsh-wechat-linkrow">
+                <div className="dsh-weixin-clawbot-linkrow">
                   <span>无法扫码？在手机浏览器打开链接</span>
-                  <button type="button" className="dsh-wechat-linkbtn" onClick={() => void copyLink()}>
+                  <button type="button" className="dsh-weixin-clawbot-linkbtn" onClick={() => void copyLink()}>
                     {copied ? <IconCheckOutline14 size={14} /> : <IconCopyOutline16 size={14} />}
                     {copied ? '已复制' : '复制'}
                   </button>
                   <a
-                    className="dsh-wechat-linkbtn"
+                    className="dsh-weixin-clawbot-linkbtn"
                     href={props.payload.url}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -424,17 +424,17 @@ function WechatDialog(props: {
 
           {state?.kind === 'logged-in' && (
             <>
-              <div className="dsh-wechat-connected">
+              <div className="dsh-weixin-clawbot-connected">
                 <StateDot state="done" />
-                <div className="dsh-wechat-connected-main">
-                  <span className="dsh-wechat-connected-name">
+                <div className="dsh-weixin-clawbot-connected-main">
+                  <span className="dsh-weixin-clawbot-connected-name">
                     {props.payload?.user?.name ?? state.userName}
                   </span>
-                  <span className="dsh-wechat-connected-id">{state.userId}</span>
+                  <span className="dsh-weixin-clawbot-connected-id">{state.userId}</span>
                 </div>
                 <button
                   type="button"
-                  className="dsh-wechat-select"
+                  className="dsh-weixin-clawbot-select"
                   onClick={() => {
                     void postJson('/wechat/logout').then(props.refresh)
                   }}
@@ -442,7 +442,7 @@ function WechatDialog(props: {
                   解绑
                 </button>
               </div>
-              <div className="dsh-wechat-note">
+              <div className="dsh-weixin-clawbot-note">
                 <span aria-hidden="true">ⓘ</span>
                 <span>请在微信里向机器人发送任意消息；首次消息会收到欢迎和帮助。</span>
               </div>
@@ -450,12 +450,12 @@ function WechatDialog(props: {
           )}
 
           {(state === undefined || state.kind === 'none') && (
-            <div className="dsh-wechat-qr-hint">等待微信后端就绪后显示二维码…</div>
+            <div className="dsh-weixin-clawbot-qr-hint">等待微信后端就绪后显示二维码…</div>
           )}
         </div>
 
-        <div className="dsh-wechat-section">
-          <div className="dsh-wechat-section-title">机器人回复颗粒度</div>
+        <div className="dsh-weixin-clawbot-section">
+          <div className="dsh-weixin-clawbot-section-title">机器人回复颗粒度</div>
           <SettingRow label="消息详细程度" desc="控制机器人回复的详细程度。">
             <DropdownSelect
               label="标准回复"
@@ -469,9 +469,9 @@ function WechatDialog(props: {
           </SettingRow>
         </div>
 
-        <div className="dsh-wechat-section">
-          <div className="dsh-wechat-section-title">工作区访问范围</div>
-          <div className="dsh-wechat-section-desc">
+        <div className="dsh-weixin-clawbot-section">
+          <div className="dsh-weixin-clawbot-section-title">工作区访问范围</div>
+          <div className="dsh-weixin-clawbot-section-desc">
             勾选机器人可以使用的工作区；在微信里发送 /ws 切换。
           </div>
           <WorkspaceScopeList
@@ -544,14 +544,14 @@ function WechatFooterAction(props: SidebarFooterActionOwnerProps): JSX.Element {
       <Tooltip label={`微信机器人 · ${status.text}`} side="right" delayMs={300}>
         <button
           type="button"
-          className={`dsh-wechat-entry${props.wide ? ' dsh-wechat-entry-wide' : ''}`}
+          className={`dsh-weixin-clawbot-entry${props.wide ? ' dsh-weixin-clawbot-entry-wide' : ''}`}
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => setOpen(true)}
         >
           <PhoneGlyph />
           {props.wide && <span>微信</span>}
-          {connected && <span className="dsh-wechat-badge" aria-hidden="true" />}
+          {connected && <span className="dsh-weixin-clawbot-badge" aria-hidden="true" />}
         </button>
       </Tooltip>
       <WechatDialog
@@ -576,6 +576,6 @@ export function apply(ctx: ClientContext): void {
           order: 50,
           inject: () => ({}),
         }, WechatFooterAction)),
-    'dsh-wechat: sidebar footer action',
+    'dsh-weixin-clawbot: sidebar footer action',
   )
 }

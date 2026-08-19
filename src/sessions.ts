@@ -1,7 +1,7 @@
 /**
  * 会话路由：微信主体（私聊用户 / 群）到 DSH 会话 id 的稳定映射。
  *
- * @module dsh-wechat/sessions
+ * @module dsh-weixin-clawbot/sessions
  */
 
 import { SessionId } from '@deepseek-ai/dsh-session'

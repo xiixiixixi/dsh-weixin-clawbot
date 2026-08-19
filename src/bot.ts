@@ -1,7 +1,7 @@
 /**
  * Wechaty 接入层：实例创建、二维码登录、媒体收发。
  *
- * @module dsh-wechat/bot
+ * @module dsh-weixin-clawbot/bot
  */
 
 import { FileBox } from '@juzi/file-box'

@@ -1,4 +1,4 @@
-# dsh-wechat
+# dsh-weixin-clawbot
 
 **DeepSeek Harness 微信远程控制插件**：把微信变成 DSH 的远程终端。扫码连接后，你用微信给机器人发消息，消息进入一个专属的 DSH agent 会话；agent 的回复、工具调用提示和错误摘要会实时发回你的微信。
 
@@ -15,17 +15,17 @@
 
 ```bash
 # 1. 安装（git 源；pnpm 会拦构建脚本属正常提示，继续第 2 步）
-dsh plugin --profile web add github:xiixiixixi/dsh-wechat
+dsh plugin --profile web add github:xiixiixixi/dsh-weixin-clawbot
 
 # 2. 放行构建脚本（一次性）：编辑 $DSH_HOME/profiles/web/pnpm-workspace.yaml，加上
 #    onlyBuiltDependencies:
-#      - dsh-wechat
+#      - dsh-weixin-clawbot
 
 # 3. 重跑第 1 步，prepare 自动编译出 lib/
-dsh plugin --profile web add github:xiixiixixi/dsh-wechat
+dsh plugin --profile web add github:xiixiixixi/dsh-weixin-clawbot
 ```
 
-本地开发用路径安装：`dsh plugin --profile web add /path/to/dsh-wechat`（link 方式，改代码 `npm run build` 后即生效）。
+本地开发用路径安装：`dsh plugin --profile web add /path/to/dsh-weixin-clawbot`（link 方式，改代码 `npm run build` 后即生效）。
 
 装完后把它插进组合（见下）。
 
@@ -35,13 +35,13 @@ dsh plugin --profile web add github:xiixiixixi/dsh-wechat
 
 ```bash
 # 1. 安装包（本地路径或 npm 包名）
-dsh plugin --profile web add /path/to/dsh-wechat
+dsh plugin --profile web add /path/to/dsh-weixin-clawbot
 
 # 2. 编辑 $DSH_HOME/profiles/web/cordis.patch.yml，插入插件条目：
 cat >> $DSH_HOME/profiles/web/cordis.patch.yml <<'EOF'
 - insert:
     - id: wechat
-      name: dsh-wechat
+      name: dsh-weixin-clawbot
       config:
         puppet: ilink
         # 微信 agent 的默认工作目录（建议显式配置成你的工程主文件夹）
@@ -59,7 +59,7 @@ EOF
 | 配置 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `enabled` | boolean | `true` | 是否启用 |
-| `name` | string | `dsh-wechat` | 实例名（日志标识） |
+| `name` | string | `dsh-weixin-clawbot` | 实例名（日志标识） |
 | `puppet` | string | `ilink` | `'ilink'`（官方机器人通道）或 wechaty puppet 包名（见下） |
 | `puppetOptions` | object | `{}` | 后端参数；ilink 支持 `botAgent`（自声明 UA） |
 | `workspace` | string | `process.cwd()` | agent 的默认工作目录（未配置时 = dsh 启动时所在目录）。勾选工作区或 `/ws` 切换后按工作区路径工作；建议显式配置成你的工程主文件夹 |
@@ -84,7 +84,7 @@ EOF
 
 对接**微信官方 iLink 机器人平台**——与腾讯官方 OpenClaw 微信插件（`@tencent-weixin/openclaw-weixin`，即「微信 clawbot」）相同的后端协议：
 
-- 网关 `https://ilinkai.weixin.qq.com`；`get_bot_qrcode` 出官方配对二维码 → 手机微信扫码 → 屏幕显示配对码，在 Web 弹窗输入 → 确认后 `bot_token` 自动保存到 `$DSH_HOME/dsh-wechat-ilink.json`，重启免扫码
+- 网关 `https://ilinkai.weixin.qq.com`；`get_bot_qrcode` 出官方配对二维码 → 手机微信扫码 → 屏幕显示配对码，在 Web 弹窗输入 → 确认后 `bot_token` 自动保存到 `$DSH_HOME/dsh-weixin-clawbot-ilink.json`，重启免扫码
 - `getupdates` 长轮询收消息（文本 + 语音转文字；图片/视频/文件以摘要占位）、`sendmessage` 发回复
 - 会话失效（errcode -14）自动回到待扫码态；解绑清凭据
 - 账号安全：不是网页版协议登录你的个人号，而是给微信里的官方机器人发消息（clawbot 模式）
@@ -110,7 +110,7 @@ EOF
 - **机器人回复颗粒度**：完整回复（每步 + 工具调用提示）/ 标准回复（每步文本）/ 摘要回复（仅回合结束发结果），即时生效。
 - **工作区访问范围**：多选（zcode 同款 checkbox 列表）。默认「所有工作区」= 不限制，agent 工作目录用插件配置的 `workspace`（默认 dsh 启动目录，建议在 cordis.patch.yml 里显式配置）。勾选若干工作区后，**每个微信主体默认在第一个勾选的工作区工作**，且可在微信里随时 `/ws` 切换——每个工作区一段独立会话历史，切回来还能继续。
 
-弹窗里的颗粒度/工作区范围写入 `$DSH_HOME/dsh-wechat.state.json`（原子写，重启保持；旧版单选格式自动迁移为多选）；cordis.patch.yml 里的 `replyOn`/`noticeTools` 是缺省基准值。无 workspaceRegistry 的 profile（headless）工作区列表为空，`/ws` 会提示去 Web 弹窗配置。`/ws` 的当前选择是进程内存态，dsh 重启后回到默认工作区。
+弹窗里的颗粒度/工作区范围写入 `$DSH_HOME/dsh-weixin-clawbot.state.json`（原子写，重启保持；旧版单选格式自动迁移为多选）；cordis.patch.yml 里的 `replyOn`/`noticeTools` 是缺省基准值。无 workspaceRegistry 的 profile（headless）工作区列表为空，`/ws` 会提示去 Web 弹窗配置。`/ws` 的当前选择是进程内存态，dsh 重启后回到默认工作区。
 
 ### 微信对话
 
@@ -146,9 +146,9 @@ npm run build       # 编译 lib/
 冒烟验证（在隔离 DSH_HOME 里跑真实 web profile）：
 
 ```bash
-DSH_HOME=/tmp/dsh-wechat-smoke dsh plugin --profile web add /path/to/dsh-wechat
+DSH_HOME=/tmp/dsh-weixin-clawbot-smoke dsh plugin --profile web add /path/to/dsh-weixin-clawbot
 # 写入 insert 条目后：
-DSH_HOME=/tmp/dsh-wechat-smoke dsh --profile web --port 31789
+DSH_HOME=/tmp/dsh-weixin-clawbot-smoke dsh --profile web --port 31789
 ```
 
 ## License

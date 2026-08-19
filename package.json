@@ -1,5 +1,5 @@
 {
-  "name": "dsh-wechat",
+  "name": "dsh-weixin-clawbot",
   "version": "0.1.0",
   "description": "DeepSeek Harness 微信远程控制插件：用微信消息远程对话/控制运行中的 DSH agent",
   "type": "module",
@@ -91,7 +91,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xiixiixixi/dsh-wechat.git"
+    "url": "git+https://github.com/xiixiixixi/dsh-weixin-clawbot.git"
   },
   "author": "weixi li"
 }

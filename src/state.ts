@@ -1,10 +1,10 @@
 /**
  * 弹窗运行时设置：颗粒度 / 工作区访问范围的类型、校验与持久化。
  *
- * cordis.patch.yml 里的静态配置是基准值；$DSH_HOME/dsh-wechat.state.json
+ * cordis.patch.yml 里的静态配置是基准值；$DSH_HOME/dsh-weixin-clawbot.state.json
  * 存用户在弹窗里的运行时覆盖（原子写，读失败回退空对象）。
  *
- * @module dsh-wechat/state
+ * @module dsh-weixin-clawbot/state
  */
 
 import fs from 'node:fs'
@@ -27,10 +27,21 @@ export type RuntimeOverrides = {
 /** workspaceRegistry 记录的 client 投影。 */
 export type WorkspaceLite = { id: string; title: string; path: string }
 
-/** state 文件路径：$DSH_HOME/dsh-wechat.state.json（回退 ~/.dsh）。 */
+/** state 文件路径：$DSH_HOME/dsh-weixin-clawbot.state.json（回退 ~/.dsh）。 */
 export function resolveStatePath(): string {
   const home = process.env.DSH_HOME ?? (process.env.HOME ? `${process.env.HOME}/.dsh` : '/tmp/.dsh')
-  return path.join(home, 'dsh-wechat.state.json')
+  return path.join(home, 'dsh-weixin-clawbot.state.json')
+}
+
+/** 一次性迁移旧包名（dsh-wechat）的 state 文件；新文件已存在则不动。 */
+export function migrateLegacyStateFile(newFile: string): void {
+  const legacy = newFile.replace('dsh-weixin-clawbot.state.json', 'dsh-wechat.state.json')
+  if (newFile === legacy || !fs.existsSync(legacy) || fs.existsSync(newFile)) return
+  try {
+    fs.copyFileSync(legacy, newFile)
+  } catch {
+    // 迁移失败按全新配置处理
+  }
 }
 
 /** 从静态配置推导颗粒度（存量用户行为保持不变）。 */

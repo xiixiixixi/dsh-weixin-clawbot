@@ -1,7 +1,7 @@
 /**
  * 文本与事件格式化纯函数：assistant 消息文本提取、微信分块、控制命令解析。
  *
- * @module dsh-wechat/format
+ * @module dsh-weixin-clawbot/format
  */
 
 import type { AssistantMessage } from '@deepseek-ai/dsh-llm'

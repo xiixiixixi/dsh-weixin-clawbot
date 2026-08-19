@@ -5,7 +5,7 @@
  * - 出站：订阅 `session/event`，把本插件会话的 assistant 文本发回微信
  * - 网页：暴露 `/wechat/qrcode` 状态，供 Web GUI 的扫码窗口轮询登录二维码
  *
- * @module dsh-wechat/backend
+ * @module dsh-weixin-clawbot/backend
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -32,6 +32,7 @@ import { IlinkChannel, type IlinkInboundMessage } from './ilink.js'
 import { decideDm, decideGroup } from './policy.js'
 import {
   granularityFromConfig,
+  migrateLegacyStateFile,
   loadState,
   noticeToolsOf,
   replyOnOf,
@@ -302,6 +303,7 @@ export class WechatBackend {
   /** 启动：订阅会话事件、解析 puppet、启动微信通道（wechaty 或 iLink）。 */
   async start(): Promise<void> {
     if (!this.config.enabled) return
+    migrateLegacyStateFile(this.stateFile)
     this.overrides = loadState(this.stateFile)
 
     this.disposers.push(
@@ -354,7 +356,7 @@ export class WechatBackend {
 
   private async startIlink(): Promise<void> {
     const channel = new IlinkChannel({
-      stateFile: this.stateFile.replace(/dsh-wechat\.state\.json$/, 'dsh-wechat-ilink.json'),
+      stateFile: this.stateFile.replace(/dsh-weixin-clawbot\.state\.json$/, 'dsh-weixin-clawbot-ilink.json'),
       log: this.log,
     })
     channel.setBotAgent(

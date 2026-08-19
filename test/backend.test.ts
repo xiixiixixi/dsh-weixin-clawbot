@@ -252,7 +252,7 @@ import { sessionIdFor, subjectFromSessionId } from '../src/sessions.js'
 import type { Mock } from 'vitest'
 
 function tempStateFile(): string {
-  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-wechat-be-')), 'state.json')
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-weixin-clawbot-be-')), 'state.json')
 }
 
 function lastCreateArg(ctx: Context): { meta?: { cwd?: string } } {

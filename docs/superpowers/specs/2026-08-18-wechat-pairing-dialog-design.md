@@ -1,11 +1,11 @@
-# dsh-wechat 配对弹窗重构设计（对齐 zcode Bot Channel 微信管理页）
+# dsh-weixin-clawbot 配对弹窗重构设计（对齐 zcode Bot Channel 微信管理页）
 
 - 日期：2026-08-18
 - 状态：已确认（用户于 2026-08-18 批准）
 
 ## 背景
 
-dsh-wechat 的扫码连接 UI 目前有三个问题：
+dsh-weixin-clawbot 的扫码连接 UI 目前有三个问题：
 
 1. 二维码曾直接打印在终端（工作区已删除 `qrcode-terminal`，扫码入口应完全转移到 web 端）。
 2. web 端弹窗内容粗糙：硬编码颜色（`#666`/`#888`/`#eee`/橙色）、状态文案暴露 wechaty 内部状态码（「等待扫码登录（状态 2）」）、二维码裸 `<img>`、成功态用 emoji、自制 tooltip。
@@ -103,7 +103,7 @@ type WechatQrPayload = {
 
 ## 持久化
 
-运行时设置（颗粒度、工作区范围）写入 `$DSH_HOME/dsh-wechat.state.json`
+运行时设置（颗粒度、工作区范围）写入 `$DSH_HOME/dsh-weixin-clawbot.state.json`
 （原子写：临时文件 + rename）。读取失败回退默认值并在日志告警。
 cordis.patch.yml 里的静态配置仍是基准值；state 文件是用户在弹窗里的运行时覆盖。
 
@@ -116,8 +116,8 @@ cordis.patch.yml 里的静态配置仍是基准值；state 文件是用户在弹
 ## 工程方式
 
 - **样式**：`src/client/wechat.css` 真样式表，esbuild `loader: { '.css': 'text' }` 打包，
-  `apply()` 时注入 `<style data-plugin="dsh-wechat">`（dsh 模块加载器官方支持，自动管理生命周期）。
-  类名前缀 `dsh-wechat-`，全部颜色/字体走 `--dsw-alias-*` 令牌。
+  `apply()` 时注入 `<style data-plugin="dsh-weixin-clawbot">`（dsh 模块加载器官方支持，自动管理生命周期）。
+  类名前缀 `dsh-weixin-clawbot-`，全部颜色/字体走 `--dsw-alias-*` 令牌。
   唯一硬编码色：微信品牌绿 logo（`#07C160`）与二维码白底（可扫性要求）。
 - **组件复用**：`Modal`（弹窗 chrome）、`Menu`（两个下拉）、`StateDot`（状态点）、
   `writeClipboard`（复制）、`Tooltip`（侧边栏入口 hover）。

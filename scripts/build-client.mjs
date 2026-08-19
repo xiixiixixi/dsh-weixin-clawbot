@@ -28,7 +28,7 @@ await build({
   loader: { '.css': 'text' },
   external,
   banner: {
-    js: 'window.__ModuleLoader__.load({ id: "dsh-wechat", factory: function (require) { var module = { exports: {} }; var exports = module.exports; Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });',
+    js: 'window.__ModuleLoader__.load({ id: "dsh-weixin-clawbot", factory: function (require) { var module = { exports: {} }; var exports = module.exports; Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });',
   },
   footer: {
     js: 'return module.exports; } });',

@@ -1,12 +1,12 @@
 /*
- * dsh-wechat 弹窗与侧边栏入口样式。
+ * dsh-weixin-clawbot 弹窗与侧边栏入口样式。
  * 颜色/字体全部走 --dsw-alias-* 令牌（深浅色自动适配）；
  * 唯二硬编码色：微信品牌绿 #07C160（logo）与二维码白底（可扫性要求）。
  */
 
 /* ── 侧边栏入口 ─────────────────────────────────────────── */
 
-.dsh-wechat-entry {
+.dsh-weixin-clawbot-entry {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -23,13 +23,13 @@
   font-size: 14px;
 }
 
-.dsh-wechat-entry:hover {
+.dsh-weixin-clawbot-entry:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
 /* 宽侧栏：与设置行一致的 34px 圆角行 */
-.dsh-wechat-entry-wide {
+.dsh-weixin-clawbot-entry-wide {
   width: auto;
   height: 34px;
   margin: 4px -4px 4px;
@@ -38,7 +38,7 @@
 }
 
 /* 连通角标：图标右下角 8px 绿点 */
-.dsh-wechat-badge {
+.dsh-weixin-clawbot-badge {
   position: absolute;
   right: 7px;
   bottom: 7px;
@@ -51,19 +51,19 @@
 
 /* ── 弹窗（挂 Modal className，卡片从 380 扩到 420） ─────── */
 
-.dsh-wechat-dialog {
+.dsh-weixin-clawbot-dialog {
   width: min(420px, 100%);
 }
 
 /* headless 模式自绘 frame：左右 24 / 上 22 的内容边距 */
-.dsh-wechat-frame {
+.dsh-weixin-clawbot-frame {
   display: flex;
   flex-direction: column;
   padding: 22px 24px 0;
 }
 
 /* 自绘关闭钮（对齐 Modal 默认 header 的 close 规格） */
-.dsh-wechat-close {
+.dsh-weixin-clawbot-close {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -77,22 +77,22 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.dsh-wechat-close:hover {
+.dsh-weixin-clawbot-close:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.dsh-wechat-header {
+.dsh-weixin-clawbot-header {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.dsh-wechat-header-main {
+.dsh-weixin-clawbot-header-main {
   flex: 1;
   min-width: 0;
 }
 
-.dsh-wechat-logo {
+.dsh-weixin-clawbot-logo {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -104,7 +104,7 @@
   color: #fff;
 }
 
-.dsh-wechat-title {
+.dsh-weixin-clawbot-title {
   margin: 0;
   font-size: 16px;
   line-height: 24px;
@@ -112,7 +112,7 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-subtitle {
+.dsh-weixin-clawbot-subtitle {
   margin: 4px 0 0;
   font-size: 13px;
   line-height: 20px;
@@ -120,7 +120,7 @@
 }
 
 /* 状态行：StateDot + 文案 */
-.dsh-wechat-statusline {
+.dsh-weixin-clawbot-statusline {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -132,7 +132,7 @@
 
 /* ── 分区（关联机器人 / 颗粒度 / 工作区范围） ────────────── */
 
-.dsh-wechat-section {
+.dsh-weixin-clawbot-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -141,14 +141,14 @@
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
 
-.dsh-wechat-section-title {
+.dsh-weixin-clawbot-section-title {
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-section-desc {
+.dsh-weixin-clawbot-section-desc {
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
@@ -156,7 +156,7 @@
 
 /* ── 二维码卡片 ─────────────────────────────────────────── */
 
-.dsh-wechat-qr-card {
+.dsh-weixin-clawbot-qr-card {
   align-self: center;
   margin-top: 8px;
   padding: 12px;
@@ -165,13 +165,13 @@
   background: #fff; /* 二维码可扫性要求白底 */
 }
 
-.dsh-wechat-qr-img {
+.dsh-weixin-clawbot-qr-img {
   display: block;
   width: 220px;
   height: 220px;
 }
 
-.dsh-wechat-qr-hint {
+.dsh-weixin-clawbot-qr-hint {
   align-self: center;
   margin-top: 8px;
   font-size: 12px;
@@ -180,7 +180,7 @@
 }
 
 /* 「无法扫码？」链接行 */
-.dsh-wechat-linkrow {
+.dsh-weixin-clawbot-linkrow {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -189,7 +189,7 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.dsh-wechat-linkbtn {
+.dsh-weixin-clawbot-linkbtn {
   border: none;
   padding: 0;
   background: none;
@@ -203,14 +203,14 @@
   text-decoration: none;
 }
 
-.dsh-wechat-linkbtn:hover {
+.dsh-weixin-clawbot-linkbtn:hover {
   color: var(--dsw-alias-label-primary);
   text-decoration: underline;
 }
 
 /* ── 已连通 ─────────────────────────────────────────────── */
 
-.dsh-wechat-connected {
+.dsh-weixin-clawbot-connected {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -221,7 +221,7 @@
   background: var(--dsw-alias-bg-layer-1);
 }
 
-.dsh-wechat-connected-main {
+.dsh-weixin-clawbot-connected-main {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -229,14 +229,14 @@
   gap: 2px;
 }
 
-.dsh-wechat-connected-name {
+.dsh-weixin-clawbot-connected-name {
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-connected-id {
+.dsh-weixin-clawbot-connected-id {
   font-size: 12px;
   line-height: 18px;
   font-family: var(--ds-font-family-code);
@@ -246,7 +246,7 @@
 }
 
 /* 首条消息提示框 */
-.dsh-wechat-note {
+.dsh-weixin-clawbot-note {
   display: flex;
   gap: 8px;
   margin-top: 10px;
@@ -260,32 +260,32 @@
 
 /* ── 设置行（标题/描述 左，控件 右） ───────────────────── */
 
-.dsh-wechat-row {
+.dsh-weixin-clawbot-row {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 6px;
 }
 
-.dsh-wechat-row-text {
+.dsh-weixin-clawbot-row-text {
   flex: 1;
   min-width: 0;
 }
 
-.dsh-wechat-row-label {
+.dsh-weixin-clawbot-row-label {
   font-size: 14px;
   line-height: 22px;
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-row-desc {
+.dsh-weixin-clawbot-row-desc {
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
 }
 
 /* 下拉触发按钮（Menu 的 anchor） */
-.dsh-wechat-select {
+.dsh-weixin-clawbot-select {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -302,16 +302,16 @@
   max-width: 200px;
 }
 
-.dsh-wechat-select:hover {
+.dsh-weixin-clawbot-select:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.dsh-wechat-select:disabled {
+.dsh-weixin-clawbot-select:disabled {
   cursor: default;
   opacity: 0.6;
 }
 
-.dsh-wechat-select-label {
+.dsh-weixin-clawbot-select-label {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -319,14 +319,14 @@
 
 /* ── 工作区多选列表（zcode 同款 checkbox 行） ───────────── */
 
-.dsh-wechat-check-list {
+.dsh-weixin-clawbot-check-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
   margin-top: 6px;
 }
 
-.dsh-wechat-check-row {
+.dsh-weixin-clawbot-check-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -340,16 +340,16 @@
   cursor: pointer;
 }
 
-.dsh-wechat-check-row:hover {
+.dsh-weixin-clawbot-check-row:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.dsh-wechat-check-row:disabled {
+.dsh-weixin-clawbot-check-row:disabled {
   cursor: default;
   opacity: 0.6;
 }
 
-.dsh-wechat-check-box {
+.dsh-weixin-clawbot-check-box {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -362,12 +362,12 @@
   color: var(--dsw-alias-label-primary-foreground, #fff);
 }
 
-.dsh-wechat-check-box[data-checked='true'] {
+.dsh-weixin-clawbot-check-box[data-checked='true'] {
   border-color: transparent;
   background: var(--dsw-alias-brand-primary);
 }
 
-.dsh-wechat-check-text {
+.dsh-weixin-clawbot-check-text {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -375,13 +375,13 @@
   gap: 8px;
 }
 
-.dsh-wechat-check-title {
+.dsh-weixin-clawbot-check-title {
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-check-path {
+.dsh-weixin-clawbot-check-path {
   flex: 1;
   min-width: 0;
   font-size: 11px;
@@ -393,7 +393,7 @@
   text-overflow: ellipsis;
 }
 
-.dsh-wechat-check-empty {
+.dsh-weixin-clawbot-check-empty {
   padding: 7px 8px;
   font-size: 12px;
   line-height: 18px;
@@ -402,7 +402,7 @@
 
 /* ── iLink 配对码输入行 ─────────────────────────────────── */
 
-.dsh-wechat-verify {
+.dsh-weixin-clawbot-verify {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -412,14 +412,14 @@
   background: var(--dsw-alias-bg-layer-1);
 }
 
-.dsh-wechat-verify-label {
+.dsh-weixin-clawbot-verify-label {
   flex: none;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);
 }
 
-.dsh-wechat-verify-input {
+.dsh-weixin-clawbot-verify-input {
   width: 90px;
   height: 30px;
   padding: 0 10px;
@@ -432,7 +432,7 @@
   font-family: var(--ds-font-family-code);
 }
 
-.dsh-wechat-verify-input:focus {
+.dsh-weixin-clawbot-verify-input:focus {
   outline: none;
   border-color: var(--dsw-alias-brand-primary);
 }

@@ -5,7 +5,7 @@
  *
  * ```yaml
  * - id: wechat
- *   name: dsh-wechat
+ *   name: dsh-weixin-clawbot
  *   config:
  *     puppet: wechaty-puppet-wechat
  *     dmPolicy: pairing
@@ -13,7 +13,7 @@
  *     groups: ["xxx@chatroom"]
  * ```
  *
- * @module dsh-wechat/config
+ * @module dsh-weixin-clawbot/config
  */
 
 import z from '@deepseek-ai/schemastery'
@@ -63,7 +63,7 @@ export interface WechatConfig {
 
 export const Config: z<WechatConfig> = z.object({
   enabled: z.boolean().default(true),
-  name: z.string().default('dsh-wechat'),
+  name: z.string().default('dsh-weixin-clawbot'),
   puppet: z.string().default('ilink'),
   puppetOptions: z.dict(z.any()).default({}),
   workspace: z.string().default(process.cwd()),

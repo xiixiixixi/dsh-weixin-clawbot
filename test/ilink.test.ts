@@ -10,7 +10,7 @@ import {
   type IlinkCredentials,
 } from '../src/ilink.js'
 
-const dir = path.join(os.tmpdir(), `dsh-wechat-ilink-test-${process.pid}`)
+const dir = path.join(os.tmpdir(), `dsh-weixin-clawbot-ilink-test-${process.pid}`)
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
 
 function stateFile(): string {

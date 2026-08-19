@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 dsh-wechat 的 web 扫码弹窗重构成 zcode Bot Channel「微信机器人」管理页的样式与能力：令牌化样式、状态文案人话化、解绑、回复颗粒度、工作区访问范围（对接 `ctx.workspaceRegistry`）。
+**Goal:** 把 dsh-weixin-clawbot 的 web 扫码弹窗重构成 zcode Bot Channel「微信机器人」管理页的样式与能力：令牌化样式、状态文案人话化、解绑、回复颗粒度、工作区访问范围（对接 `ctx.workspaceRegistry`）。
 
-**Architecture:** host 面新增运行时设置（持久化到 `$DSH_HOME/dsh-wechat.state.json`）+ 两个 POST 路由 + 懒注入 workspaceRegistry；client 面整体重写 `src/client/index.tsx`，样式走真 CSS 文件经 esbuild text-loader 打包、模块顶层注入 `<style data-plugin-css>`（dsh 模块加载器在工厂执行后认领无主 style 标签）。
+**Architecture:** host 面新增运行时设置（持久化到 `$DSH_HOME/dsh-weixin-clawbot.state.json`）+ 两个 POST 路由 + 懒注入 workspaceRegistry；client 面整体重写 `src/client/index.tsx`，样式走真 CSS 文件经 esbuild text-loader 打包、模块顶层注入 `<style data-plugin-css>`（dsh 模块加载器在工厂执行后认领无主 style 标签）。
 
 **Tech Stack:** TypeScript (strict, NodeNext)、React 18、cordis、wechaty、esbuild、vitest。
 
@@ -28,7 +28,7 @@
 - wechaty `ScanStatus`：`Unknown=0 Cancel=1 Waiting=2 Scanned=3 Confirmed=4 Timeout=5`。
 - workspaceRegistry 服务：`ctx.workspaceRegistry.list(): Workspace[]`，`Workspace = {id, path, title, ...}`（结构类型即可）。懒注入模式照抄现有 `ctx.inject(['webServer'], ...)`。
 - 模块加载器样式认领：`packages/client/modules/src/client/system.ts` 的 `claimStyles` 在工厂执行后把所有无 `data-plugin` 的 `<style>` 归属当前插件。
-- smoke 用 `npx -y @deepseek-ai/dsh@0.1.0-rc.7`（npm latest 就是 rc.7；本机无全局 dsh）。profile web 的插件是 `link:/Users/weixili/git/dsh-wechat`，`npm run build` 后直接生效。
+- smoke 用 `npx -y @deepseek-ai/dsh@0.1.0-rc.7`（npm latest 就是 rc.7；本机无全局 dsh）。profile web 的插件是 `link:/Users/weixili/git/dsh-weixin-clawbot`，`npm run build` 后直接生效。
 
 ---
 
@@ -72,7 +72,7 @@ import {
   validateSettingsInput,
 } from '../src/state.js'
 
-const dir = path.join(tmpdir(), `dsh-wechat-state-test-${process.pid}`)
+const dir = path.join(tmpdir(), `dsh-weixin-clawbot-state-test-${process.pid}`)
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('granularity 映射', () => {
@@ -94,7 +94,7 @@ describe('granularity 映射', () => {
 
 describe('state 文件读写', () => {
   it('saveState 原子写入并可读回', () => {
-    const file = path.join(dir, 'dsh-wechat.state.json')
+    const file = path.join(dir, 'dsh-weixin-clawbot.state.json')
     saveState(file, { granularity: 'summary', workspaceScope: { workspaceId: 'w1' } })
     expect(loadState(file)).toEqual({ granularity: 'summary', workspaceScope: { workspaceId: 'w1' } })
   })
@@ -119,7 +119,7 @@ describe('state 文件读写', () => {
     const prev = process.env.DSH_HOME
     process.env.DSH_HOME = '/tmp/dsh-home-x'
     try {
-      expect(resolveStatePath()).toBe('/tmp/dsh-home-x/dsh-wechat.state.json')
+      expect(resolveStatePath()).toBe('/tmp/dsh-home-x/dsh-weixin-clawbot.state.json')
     } finally {
       if (prev === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = prev
@@ -171,10 +171,10 @@ Expected: FAIL（`Cannot find module '../src/state.js'`）
 /**
  * 弹窗运行时设置：颗粒度 / 工作区访问范围的类型、校验与持久化。
  *
- * cordis.patch.yml 里的静态配置是基准值；$DSH_HOME/dsh-wechat.state.json
+ * cordis.patch.yml 里的静态配置是基准值；$DSH_HOME/dsh-weixin-clawbot.state.json
  * 存用户在弹窗里的运行时覆盖（原子写，读失败回退空对象）。
  *
- * @module dsh-wechat/state
+ * @module dsh-weixin-clawbot/state
  */
 
 import fs from 'node:fs'
@@ -197,10 +197,10 @@ export type RuntimeOverrides = {
 /** workspaceRegistry 记录的 client 投影。 */
 export type WorkspaceLite = { id: string; title: string; path: string }
 
-/** state 文件路径：$DSH_HOME/dsh-wechat.state.json（回退 ~/.dsh）。 */
+/** state 文件路径：$DSH_HOME/dsh-weixin-clawbot.state.json（回退 ~/.dsh）。 */
 export function resolveStatePath(): string {
   const home = process.env.DSH_HOME ?? (process.env.HOME ? `${process.env.HOME}/.dsh` : '/tmp/.dsh')
-  return path.join(home, 'dsh-wechat.state.json')
+  return path.join(home, 'dsh-weixin-clawbot.state.json')
 }
 
 /** 从静态配置推导颗粒度（存量用户行为保持不变）。 */
@@ -343,7 +343,7 @@ import path from 'node:path'
 import { loadState } from '../src/state.js'
 
 function tempStateFile(): string {
-  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-wechat-be-')), 'state.json')
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-weixin-clawbot-be-')), 'state.json')
 }
 
 describe('WechatBackend 运行时设置', () => {
@@ -618,7 +618,7 @@ webServer 注入块内追加：
         }
         json(res, 200, { ok: true, settings: backend.updateSettings(verdict.patch) })
       },
-    } satisfies WebRoute), 'dsh-wechat: /wechat/settings route')
+    } satisfies WebRoute), 'dsh-weixin-clawbot: /wechat/settings route')
 
     webCtx.effect(() => webCtx.webServer.register({
       kind: 'exact',
@@ -627,7 +627,7 @@ webServer 注入块内追加：
         await backend.logout()
         json(res, 200, { ok: true })
       },
-    } satisfies WebRoute), 'dsh-wechat: /wechat/logout route')
+    } satisfies WebRoute), 'dsh-weixin-clawbot: /wechat/logout route')
 ```
 
 webServer 块之外追加（与 webServer 同款懒注入模式）：
@@ -637,7 +637,7 @@ webServer 块之外追加（与 webServer 同款懒注入模式）：
   // headless 等没有注册表的 profile 不影响微信功能（下拉退化为「所有工作区」）。
   ctx.inject(['workspaceRegistry'], (regCtx) => {
     backend.setWorkspaceRegistry(regCtx.workspaceRegistry)
-    regCtx.effect(() => () => backend.setWorkspaceRegistry(undefined), 'dsh-wechat: workspaceRegistry unbind')
+    regCtx.effect(() => () => backend.setWorkspaceRegistry(undefined), 'dsh-weixin-clawbot: workspaceRegistry unbind')
   })
 ```
 
@@ -731,20 +731,20 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
 
 **Interfaces:**
 - Produces: 类名（Task 6 直接使用）——
-  `.dsh-wechat-dialog`（Modal className，扩宽到 420）、`.dsh-wechat-header`、`.dsh-wechat-logo`、`.dsh-wechat-title`、`.dsh-wechat-subtitle`、`.dsh-wechat-statusline`、`.dsh-wechat-section`、`.dsh-wechat-section-title`、`.dsh-wechat-section-desc`、`.dsh-wechat-qr-card`、`.dsh-wechat-qr-img`、`.dsh-wechat-qr-hint`、`.dsh-wechat-linkrow`、`.dsh-wechat-linkbtn`、`.dsh-wechat-connected`、`.dsh-wechat-connected-name`、`.dsh-wechat-connected-id`、`.dsh-wechat-note`、`.dsh-wechat-row`、`.dsh-wechat-row-text`、`.dsh-wechat-row-label`、`.dsh-wechat-row-desc`、`.dsh-wechat-select`、`.dsh-wechat-footer-cap`、`.dsh-wechat-badge`（入口图标连通角标）、`.dsh-wechat-entry`（入口按钮）
+  `.dsh-weixin-clawbot-dialog`（Modal className，扩宽到 420）、`.dsh-weixin-clawbot-header`、`.dsh-weixin-clawbot-logo`、`.dsh-weixin-clawbot-title`、`.dsh-weixin-clawbot-subtitle`、`.dsh-weixin-clawbot-statusline`、`.dsh-weixin-clawbot-section`、`.dsh-weixin-clawbot-section-title`、`.dsh-weixin-clawbot-section-desc`、`.dsh-weixin-clawbot-qr-card`、`.dsh-weixin-clawbot-qr-img`、`.dsh-weixin-clawbot-qr-hint`、`.dsh-weixin-clawbot-linkrow`、`.dsh-weixin-clawbot-linkbtn`、`.dsh-weixin-clawbot-connected`、`.dsh-weixin-clawbot-connected-name`、`.dsh-weixin-clawbot-connected-id`、`.dsh-weixin-clawbot-note`、`.dsh-weixin-clawbot-row`、`.dsh-weixin-clawbot-row-text`、`.dsh-weixin-clawbot-row-label`、`.dsh-weixin-clawbot-row-desc`、`.dsh-weixin-clawbot-select`、`.dsh-weixin-clawbot-footer-cap`、`.dsh-weixin-clawbot-badge`（入口图标连通角标）、`.dsh-weixin-clawbot-entry`（入口按钮）
 
 - [ ] **Step 1: 写完整 CSS**
 
 ```css
 /*
- * dsh-wechat 弹窗与侧边栏入口样式。
+ * dsh-weixin-clawbot 弹窗与侧边栏入口样式。
  * 颜色/字体全部走 --dsw-alias-* 令牌（深浅色自动适配）；
  * 唯二硬编码色：微信品牌绿 #07C160（logo）与二维码白底（可扫性要求）。
  */
 
 /* ── 侧边栏入口 ─────────────────────────────────────────── */
 
-.dsh-wechat-entry {
+.dsh-weixin-clawbot-entry {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -761,13 +761,13 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   font-size: 14px;
 }
 
-.dsh-wechat-entry:hover {
+.dsh-weixin-clawbot-entry:hover {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
 
 /* 连通角标：图标右下角 8px 绿点 */
-.dsh-wechat-badge {
+.dsh-weixin-clawbot-badge {
   position: absolute;
   right: 7px;
   bottom: 7px;
@@ -780,17 +780,17 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
 
 /* ── 弹窗（挂 Modal className，卡片从 380 扩到 420） ─────── */
 
-.dsh-wechat-dialog {
+.dsh-weixin-clawbot-dialog {
   width: min(420px, 100%);
 }
 
-.dsh-wechat-header {
+.dsh-weixin-clawbot-header {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.dsh-wechat-logo {
+.dsh-weixin-clawbot-logo {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -802,7 +802,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   color: #fff;
 }
 
-.dsh-wechat-title {
+.dsh-weixin-clawbot-title {
   margin: 0;
   font-size: 16px;
   line-height: 24px;
@@ -810,7 +810,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-subtitle {
+.dsh-weixin-clawbot-subtitle {
   margin: 4px 0 0;
   font-size: 13px;
   line-height: 20px;
@@ -818,7 +818,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
 }
 
 /* 状态行：StateDot + 文案 */
-.dsh-wechat-statusline {
+.dsh-weixin-clawbot-statusline {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -830,7 +830,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
 
 /* ── 分区（关联机器人 / 颗粒度 / 工作区范围） ────────────── */
 
-.dsh-wechat-section {
+.dsh-weixin-clawbot-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -839,14 +839,14 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
 
-.dsh-wechat-section-title {
+.dsh-weixin-clawbot-section-title {
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-section-desc {
+.dsh-weixin-clawbot-section-desc {
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
@@ -854,7 +854,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
 
 /* ── 二维码卡片 ─────────────────────────────────────────── */
 
-.dsh-wechat-qr-card {
+.dsh-weixin-clawbot-qr-card {
   align-self: center;
   margin-top: 8px;
   padding: 12px;
@@ -863,13 +863,13 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   background: #fff; /* 二维码可扫性要求白底 */
 }
 
-.dsh-wechat-qr-img {
+.dsh-weixin-clawbot-qr-img {
   display: block;
   width: 220px;
   height: 220px;
 }
 
-.dsh-wechat-qr-hint {
+.dsh-weixin-clawbot-qr-hint {
   align-self: center;
   margin-top: 8px;
   font-size: 12px;
@@ -878,7 +878,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
 }
 
 /* 「无法扫码？」链接行 */
-.dsh-wechat-linkrow {
+.dsh-weixin-clawbot-linkrow {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -887,7 +887,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   color: var(--dsw-alias-label-tertiary);
 }
 
-.dsh-wechat-linkbtn {
+.dsh-weixin-clawbot-linkbtn {
   border: none;
   padding: 0;
   background: none;
@@ -900,14 +900,14 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   gap: 4px;
 }
 
-.dsh-wechat-linkbtn:hover {
+.dsh-weixin-clawbot-linkbtn:hover {
   color: var(--dsw-alias-label-primary);
   text-decoration: underline;
 }
 
 /* ── 已连通 ─────────────────────────────────────────────── */
 
-.dsh-wechat-connected {
+.dsh-weixin-clawbot-connected {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -918,7 +918,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   background: var(--dsw-alias-bg-layer-1);
 }
 
-.dsh-wechat-connected-main {
+.dsh-weixin-clawbot-connected-main {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -926,14 +926,14 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   gap: 2px;
 }
 
-.dsh-wechat-connected-name {
+.dsh-weixin-clawbot-connected-name {
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-connected-id {
+.dsh-weixin-clawbot-connected-id {
   font-size: 12px;
   line-height: 18px;
   font-family: var(--ds-font-family-code);
@@ -943,7 +943,7 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
 }
 
 /* 首条消息提示框 */
-.dsh-wechat-note {
+.dsh-weixin-clawbot-note {
   display: flex;
   gap: 8px;
   margin-top: 10px;
@@ -957,32 +957,32 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
 
 /* ── 设置行（标题/描述 左，控件 右） ───────────────────── */
 
-.dsh-wechat-row {
+.dsh-weixin-clawbot-row {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 6px;
 }
 
-.dsh-wechat-row-text {
+.dsh-weixin-clawbot-row-text {
   flex: 1;
   min-width: 0;
 }
 
-.dsh-wechat-row-label {
+.dsh-weixin-clawbot-row-label {
   font-size: 14px;
   line-height: 22px;
   color: var(--dsw-alias-label-primary);
 }
 
-.dsh-wechat-row-desc {
+.dsh-weixin-clawbot-row-desc {
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
 }
 
 /* 下拉触发按钮（Menu 的 anchor） */
-.dsh-wechat-select {
+.dsh-weixin-clawbot-select {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -999,18 +999,18 @@ git commit -m "build(client): css text-loader + tsx 纳入类型检查 + 显式 
   max-width: 200px;
 }
 
-.dsh-wechat-select:hover {
+.dsh-weixin-clawbot-select:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.dsh-wechat-select-label {
+.dsh-weixin-clawbot-select-label {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 /* 底部 caption：puppet 名 */
-.dsh-wechat-footer-cap {
+.dsh-weixin-clawbot-footer-cap {
   margin-top: 16px;
   font-size: 11px;
   line-height: 16px;
@@ -1028,7 +1028,7 @@ Expected: 无 CSS 语法错误相关输出
 
 ```bash
 git add src/client/wechat.css
-git commit -m "style(client): dsh-wechat 弹窗/入口样式表（全令牌化）"
+git commit -m "style(client): dsh-weixin-clawbot 弹窗/入口样式表（全令牌化）"
 ```
 
 ---
@@ -1046,13 +1046,13 @@ git commit -m "style(client): dsh-wechat 弹窗/入口样式表（全令牌化�
 
 ```tsx
 /**
- * dsh-wechat 的浏览器半部分：侧边栏「微信机器人」入口 + 配对管理弹窗。
+ * dsh-weixin-clawbot 的浏览器半部分：侧边栏「微信机器人」入口 + 配对管理弹窗。
  *
  * 弹窗对齐 zcode Bot Channel 微信管理页：关联机器人（扫码/解绑）、
  * 回复颗粒度、工作区访问范围。轮询 GET /wechat/qrcode，
  * 设置写入 POST /wechat/settings，解绑 POST /wechat/logout。
  *
- * @module dsh-wechat/client
+ * @module dsh-weixin-clawbot/client
  */
 
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
@@ -1081,7 +1081,7 @@ import cssText from './wechat.css'
 // 因此注入必须发生在模块顶层（工厂体内）而不是 apply() 里。
 if (typeof document !== 'undefined') {
   const style = document.createElement('style')
-  style.setAttribute('data-plugin-css', 'dsh-wechat')
+  style.setAttribute('data-plugin-css', 'dsh-weixin-clawbot')
   document.head.append(style)
   style.textContent = cssText
 }
@@ -1175,10 +1175,10 @@ async function postJson(path: string, body?: unknown): Promise<boolean> {
 /** 设置行：左侧标题/描述，右侧控件。 */
 function SettingRow(props: { label: string; desc: string; children: JSX.Element }): JSX.Element {
   return (
-    <div className="dsh-wechat-row">
-      <div className="dsh-wechat-row-text">
-        <div className="dsh-wechat-row-label">{props.label}</div>
-        <div className="dsh-wechat-row-desc">{props.desc}</div>
+    <div className="dsh-weixin-clawbot-row">
+      <div className="dsh-weixin-clawbot-row-text">
+        <div className="dsh-weixin-clawbot-row-label">{props.label}</div>
+        <div className="dsh-weixin-clawbot-row-desc">{props.desc}</div>
       </div>
       {props.children}
     </div>
@@ -1213,11 +1213,11 @@ function DropdownSelect(props: {
       anchor={
         <button
           type="button"
-          className="dsh-wechat-select"
+          className="dsh-weixin-clawbot-select"
           disabled={props.disabled}
           onClick={() => setOpen((value) => !value)}
         >
-          <span className="dsh-wechat-select-label">{selected?.label ?? props.label}</span>
+          <span className="dsh-weixin-clawbot-select-label">{selected?.label ?? props.label}</span>
           <IconChevronDownOutline14 size={14} />
         </button>
       }
@@ -1269,48 +1269,48 @@ function WechatDialog(props: {
       onClose={props.onClose}
       title="微信机器人"
       closeLabel="关闭"
-      className="dsh-wechat-dialog"
+      className="dsh-weixin-clawbot-dialog"
     >
-      <div className="dsh-wechat-header">
-        <span className="dsh-wechat-logo" aria-hidden="true">
+      <div className="dsh-weixin-clawbot-header">
+        <span className="dsh-weixin-clawbot-logo" aria-hidden="true">
           <WechatGlyph />
         </span>
         <div>
-          <h2 className="dsh-wechat-title">微信机器人</h2>
-          <p className="dsh-wechat-subtitle">在微信里远程操控 DSH agent。</p>
+          <h2 className="dsh-weixin-clawbot-title">微信机器人</h2>
+          <p className="dsh-weixin-clawbot-subtitle">在微信里远程操控 DSH agent。</p>
         </div>
       </div>
 
-      <div className="dsh-wechat-statusline">
+      <div className="dsh-weixin-clawbot-statusline">
         <StateDot state={status.dot} />
         <span>{status.text}</span>
       </div>
 
-      <div className="dsh-wechat-section">
-        <div className="dsh-wechat-section-title">关联机器人</div>
-        <div className="dsh-wechat-section-desc">扫码后自动保存凭据。</div>
+      <div className="dsh-weixin-clawbot-section">
+        <div className="dsh-weixin-clawbot-section-title">关联机器人</div>
+        <div className="dsh-weixin-clawbot-section-desc">扫码后自动保存凭据。</div>
 
         {state?.kind === 'scan' && (
           <>
-            <div className="dsh-wechat-qr-card">
+            <div className="dsh-weixin-clawbot-qr-card">
               {state.png ? (
-                <img className="dsh-wechat-qr-img" src={state.png} alt="微信登录二维码" />
+                <img className="dsh-weixin-clawbot-qr-img" src={state.png} alt="微信登录二维码" />
               ) : (
-                <div className="dsh-wechat-qr-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: 13 }}>
+                <div className="dsh-weixin-clawbot-qr-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: 13 }}>
                   二维码生成中…
                 </div>
               )}
             </div>
-            <div className="dsh-wechat-qr-hint">{scanHint(state.status)}</div>
+            <div className="dsh-weixin-clawbot-qr-hint">{scanHint(state.status)}</div>
             {props.payload?.url !== undefined && (
-              <div className="dsh-wechat-linkrow">
+              <div className="dsh-weixin-clawbot-linkrow">
                 <span>无法扫码？在手机浏览器打开链接</span>
-                <button type="button" className="dsh-wechat-linkbtn" onClick={() => void copyLink()}>
+                <button type="button" className="dsh-weixin-clawbot-linkbtn" onClick={() => void copyLink()}>
                   {copied ? <IconCheckOutline14 size={14} /> : <IconCopyOutline16 size={14} />}
                   {copied ? '已复制' : '复制'}
                 </button>
                 <a
-                  className="dsh-wechat-linkbtn"
+                  className="dsh-weixin-clawbot-linkbtn"
                   href={props.payload.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -1324,19 +1324,19 @@ function WechatDialog(props: {
 
         {state?.kind === 'logged-in' && (
           <>
-            <div className="dsh-wechat-connected">
+            <div className="dsh-weixin-clawbot-connected">
               <StateDot state="done" />
-              <div className="dsh-wechat-connected-main">
-                <span className="dsh-wechat-connected-name">
+              <div className="dsh-weixin-clawbot-connected-main">
+                <span className="dsh-weixin-clawbot-connected-name">
                   {props.payload?.user?.name ?? state.userName}
                 </span>
-                <span className="dsh-wechat-connected-id">{state.userId}</span>
+                <span className="dsh-weixin-clawbot-connected-id">{state.userId}</span>
               </div>
               <Button variant="outline" size="sm" onClick={() => { void postJson('/wechat/logout').then(props.refresh) }}>
                 解绑
               </Button>
             </div>
-            <div className="dsh-wechat-note">
+            <div className="dsh-weixin-clawbot-note">
               <span>ⓘ</span>
               <span>请在微信里向机器人发送任意消息；首次消息会收到欢迎和帮助。</span>
             </div>
@@ -1344,12 +1344,12 @@ function WechatDialog(props: {
         )}
 
         {(state === undefined || state.kind === 'none') && (
-          <div className="dsh-wechat-qr-hint">等待微信后端就绪后显示二维码…</div>
+          <div className="dsh-weixin-clawbot-qr-hint">等待微信后端就绪后显示二维码…</div>
         )}
       </div>
 
-      <div className="dsh-wechat-section">
-        <div className="dsh-wechat-section-title">机器人回复颗粒度</div>
+      <div className="dsh-weixin-clawbot-section">
+        <div className="dsh-weixin-clawbot-section-title">机器人回复颗粒度</div>
         <SettingRow label="消息详细程度" desc="控制机器人回复的详细程度。">
           <DropdownSelect
             label="标准回复"
@@ -1361,8 +1361,8 @@ function WechatDialog(props: {
         </SettingRow>
       </div>
 
-      <div className="dsh-wechat-section">
-        <div className="dsh-wechat-section-title">工作区访问范围</div>
+      <div className="dsh-weixin-clawbot-section">
+        <div className="dsh-weixin-clawbot-section-title">工作区访问范围</div>
         <SettingRow label="可用工作区" desc="限制机器人可以在哪些工作区里工作。">
           <DropdownSelect
             label="所有工作区"
@@ -1379,7 +1379,7 @@ function WechatDialog(props: {
       </div>
 
       {props.payload?.puppet !== undefined && (
-        <div className="dsh-wechat-footer-cap">后端：{props.payload.puppet}</div>
+        <div className="dsh-weixin-clawbot-footer-cap">后端：{props.payload.puppet}</div>
       )}
     </Modal>
   )
@@ -1417,14 +1417,14 @@ function WechatFooterAction(props: SidebarFooterActionOwnerProps): JSX.Element {
       <Tooltip label={`微信机器人 · ${status.text}`} side="right" delayMs={300}>
         <button
           type="button"
-          className="dsh-wechat-entry"
+          className="dsh-weixin-clawbot-entry"
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => setOpen(true)}
         >
           <PhoneGlyph />
           {props.wide && <span>微信</span>}
-          {connected && <span className="dsh-wechat-badge" aria-hidden="true" />}
+          {connected && <span className="dsh-weixin-clawbot-badge" aria-hidden="true" />}
         </button>
       </Tooltip>
       <WechatDialog open={open} onClose={() => setOpen(false)} payload={payload} error={error} refresh={refresh} />
@@ -1443,19 +1443,19 @@ export function apply(ctx: ClientContext): void {
           order: 50,
           inject: () => ({}),
         }, WechatFooterAction)),
-    'dsh-wechat: sidebar footer action',
+    'dsh-weixin-clawbot: sidebar footer action',
   )
 }
 ```
 
 实现者注意：
-- Modal 自带 header/title/close chrome，因此 `WechatDialog` 里不再自绘关闭钮；`dsh-wechat-header` 里保留 logo+标题是视觉主体（Modal 的 `title` 只做 aria-label 与隐藏标题行，实际标题行由 `headless` 与否决定——如与 Modal 默认 header 重复，可给 Modal 传 `headless` 并完全自绘 header，二选一以视觉冒烟结果为准，代码按 `headless` 版预留：给 Modal 加 `headless` 并在 `dsh-wechat-header` 行尾自行放关闭按钮 `<button className={css.close}>`；采用 headless 时须保留 Escape/遮罩逻辑由 Modal 提供）。
+- Modal 自带 header/title/close chrome，因此 `WechatDialog` 里不再自绘关闭钮；`dsh-weixin-clawbot-header` 里保留 logo+标题是视觉主体（Modal 的 `title` 只做 aria-label 与隐藏标题行，实际标题行由 `headless` 与否决定——如与 Modal 默认 header 重复，可给 Modal 传 `headless` 并完全自绘 header，二选一以视觉冒烟结果为准，代码按 `headless` 版预留：给 Modal 加 `headless` 并在 `dsh-weixin-clawbot-header` 行尾自行放关闭按钮 `<button className={css.close}>`；采用 headless 时须保留 Escape/遮罩逻辑由 Modal 提供）。
 - 若 `IconCopyOutline16`/`IconRightUpOutline14` 等 icon 名在 primitives 中不存在（以 `node -e "console.log(Object.keys(require('@deepseek-ai/dsh-client-ui-primitives')))"` 或类型检查为准），就近替换为存在的等价 icon（如 `IconCopyOutline14` 不存在时用文字「复制」不带 icon）。
 
 - [ ] **Step 2: 类型检查 + 构建**
 
 Run: `npm run typecheck && npm run build`
-Expected: PASS；`grep -c 'dsh-wechat-entry' lib/client.js` 输出 ≥1（CSS 文本已进包）
+Expected: PASS；`grep -c 'dsh-weixin-clawbot-entry' lib/client.js` 输出 ≥1（CSS 文本已进包）
 
 - [ ] **Step 3: 全量测试**
 
@@ -1483,10 +1483,10 @@ git commit -m "feat(client): 微信机器人管理弹窗——扫码/解绑/颗�
 - [ ] **Step 1: 隔离环境起真实 dsh web**
 
 ```bash
-rm -rf /tmp/dsh-wechat-smoke && mkdir -p /tmp/dsh-wechat-smoke
-cd ~/.dsh/profiles/web && DSH_HOME=/tmp/dsh-wechat-smoke npx -y @deepseek-ai/dsh@0.1.0-rc.7 plugin --profile web add /Users/weixili/git/dsh-wechat
-# 把 examples/cordis.patch.example.yml 的 insert 条目写进 /tmp/dsh-wechat-smoke/profiles/web/cordis.patch.yml（puppet 用 wechaty-puppet-wechat4u）
-DSH_HOME=/tmp/dsh-wechat-smoke npx -y @deepseek-ai/dsh@0.1.0-rc.7 --profile web --port 31789 &
+rm -rf /tmp/dsh-weixin-clawbot-smoke && mkdir -p /tmp/dsh-weixin-clawbot-smoke
+cd ~/.dsh/profiles/web && DSH_HOME=/tmp/dsh-weixin-clawbot-smoke npx -y @deepseek-ai/dsh@0.1.0-rc.7 plugin --profile web add /Users/weixili/git/dsh-weixin-clawbot
+# 把 examples/cordis.patch.example.yml 的 insert 条目写进 /tmp/dsh-weixin-clawbot-smoke/profiles/web/cordis.patch.yml（puppet 用 wechaty-puppet-wechat4u）
+DSH_HOME=/tmp/dsh-weixin-clawbot-smoke npx -y @deepseek-ai/dsh@0.1.0-rc.7 --profile web --port 31789 &
 ```
 
 Expected: 日志出现 `[wechat] 已启动（puppet: wechaty-puppet-wechat4u）` 或扫码日志
@@ -1503,12 +1503,12 @@ Expected: 弹窗视觉与 zcode 管理页同构；无 console 错误
 
 - [ ] **Step 3: 设置写回验证**
 
-弹窗切「摘要回复」→ `cat /tmp/dsh-wechat-smoke/dsh-wechat.state.json` 出现 `"granularity": "summary"`；刷新页面后下拉停在「摘要回复」。
+弹窗切「摘要回复」→ `cat /tmp/dsh-weixin-clawbot-smoke/dsh-weixin-clawbot.state.json` 出现 `"granularity": "summary"`；刷新页面后下拉停在「摘要回复」。
 
 - [ ] **Step 4: 更新 README**
 
 - 「使用」章节新增「Web 端配对弹窗」小节（入口、四态、解绑、颗粒度、工作区范围、state 文件路径）
-- 配置表 `noticeTools`/`replyOn` 行注明「弹窗里可被运行时设置覆盖（$DSH_HOME/dsh-wechat.state.json）」
+- 配置表 `noticeTools`/`replyOn` 行注明「弹窗里可被运行时设置覆盖（$DSH_HOME/dsh-weixin-clawbot.state.json）」
 - 「后端选择」段落删除「启动后按 DSH 日志里的二维码用微信扫码登录」改为「启动后在 Web 端侧边栏微信入口扫码登录」
 
 - [ ] **Step 5: 收尾**

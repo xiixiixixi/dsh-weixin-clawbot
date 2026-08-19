@@ -2,7 +2,7 @@
 # 说明：cordis.patch.yml 是 profile 的用户补丁层，insert 会把条目追加进组合树。
 - insert:
     - id: wechat
-      name: dsh-wechat
+      name: dsh-weixin-clawbot
       config:
         enabled: true
         # 接入后端：

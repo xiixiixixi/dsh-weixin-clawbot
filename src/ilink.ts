@@ -3,7 +3,7 @@
  *
  * 对齐腾讯官方 OpenClaw 微信插件（@tencent-weixin/openclaw-weixin）的
  * 后端协议：扫码登录（含手机配对码校验）→ getupdates 长轮询收消息 →
- * sendmessage 发回复。凭据持久化到 $DSH_HOME/dsh-wechat-ilink.json。
+ * sendmessage 发回复。凭据持久化到 $DSH_HOME/dsh-weixin-clawbot-ilink.json。
  *
  * 协议要点（源码逆向整理）：
  * - 固定网关 https://ilinkai.weixin.qq.com；扫码确认后响应里的 baseurl
@@ -14,7 +14,7 @@
  * - getupdates 携带上一轮返回的 get_updates_buf 游标；errcode -14 表示
  *   会话失效需重新登录。
  *
- * @module dsh-wechat/ilink
+ * @module dsh-weixin-clawbot/ilink
  */
 
 import crypto from 'node:crypto'
@@ -62,7 +62,7 @@ export type IlinkInboundMessage = {
 type FetchLike = typeof fetch
 
 export type IlinkChannelOptions = {
-  /** 凭据文件路径；默认 $DSH_HOME/dsh-wechat-ilink.json。 */
+  /** 凭据文件路径；默认 $DSH_HOME/dsh-weixin-clawbot-ilink.json。 */
   stateFile?: string
   log?: (message: string) => void
   /** 自定义 fetch（测试注入）。 */
@@ -94,7 +94,13 @@ export class IlinkChannel {
     this.fetchImpl = opts.fetchImpl ?? fetch
     const home = process.env.DSH_HOME
       ?? (process.env.HOME ? `${process.env.HOME}/.dsh` : '/tmp/.dsh')
-    this.stateFile = opts.stateFile ?? path.join(home, 'dsh-wechat-ilink.json')
+    this.stateFile = opts.stateFile ?? path.join(home, 'dsh-weixin-clawbot-ilink.json')
+    // 旧包名（dsh-wechat）的凭据迁移：新文件不存在而旧文件存在则沿用
+    const legacyFile = this.stateFile.replace('dsh-weixin-clawbot-ilink.json', 'dsh-wechat-ilink.json')
+    if (this.stateFile !== legacyFile && !fs.existsSync(this.stateFile) && fs.existsSync(legacyFile)) {
+      this.stateFile = legacyFile
+      this.log('[wechat] 沿用旧包名的 iLink 凭据文件')
+    }
     this.credentials = loadIlinkCredentials(this.stateFile, this.log)
   }
 
@@ -325,7 +331,7 @@ export class IlinkChannel {
         msg: {
           from_user_id: '',
           to_user_id: toUserId,
-          client_id: `dsh-wechat-${crypto.randomUUID()}`,
+          client_id: `dsh-weixin-clawbot-${crypto.randomUUID()}`,
           message_type: 2, // BOT
           message_state: 2, // FINISH
           item_list: text ? [{ type: 1, text_item: { text } }] : undefined,

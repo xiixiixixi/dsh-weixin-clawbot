@@ -82,7 +82,7 @@ function ilinkConfig(workspace = '/default') {
 }
 
 function tempFile(): string {
-  return `/tmp/dsh-wechat-ilink-backend-${Math.random().toString(36).slice(2)}.json`
+  return `/tmp/dsh-weixin-clawbot-ilink-backend-${Math.random().toString(36).slice(2)}.json`
 }
 
 beforeEach(() => {

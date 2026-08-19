@@ -13,7 +13,7 @@ import {
   validateSettingsInput,
 } from '../src/state.js'
 
-const dir = path.join(tmpdir(), `dsh-wechat-state-test-${process.pid}`)
+const dir = path.join(tmpdir(), `dsh-weixin-clawbot-state-test-${process.pid}`)
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('granularity 映射', () => {
@@ -35,7 +35,7 @@ describe('granularity 映射', () => {
 
 describe('state 文件读写', () => {
   it('saveState 原子写入并可读回', () => {
-    const file = path.join(dir, 'dsh-wechat.state.json')
+    const file = path.join(dir, 'dsh-weixin-clawbot.state.json')
     saveState(file, { granularity: 'summary', workspaceScope: { workspaceIds: ['w1', 'w2'] } })
     expect(loadState(file)).toEqual({ granularity: 'summary', workspaceScope: { workspaceIds: ['w1', 'w2'] } })
   })
@@ -72,7 +72,7 @@ describe('state 文件读写', () => {
     const prev = process.env.DSH_HOME
     process.env.DSH_HOME = '/tmp/dsh-home-x'
     try {
-      expect(resolveStatePath()).toBe('/tmp/dsh-home-x/dsh-wechat.state.json')
+      expect(resolveStatePath()).toBe('/tmp/dsh-home-x/dsh-weixin-clawbot.state.json')
     } finally {
       if (prev === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = prev

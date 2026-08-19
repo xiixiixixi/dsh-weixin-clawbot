@@ -1,7 +1,7 @@
 /**
  * 入站访问策略纯函数：私聊 / 群聊的放行与拦截判断。
  *
- * @module dsh-wechat/policy
+ * @module dsh-weixin-clawbot/policy
  */
 
 import type { GroupPolicy, WechatConfig } from './config.js'

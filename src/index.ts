@@ -5,7 +5,7 @@
  *
  * ```yaml
  * - id: wechat
- *   name: dsh-wechat
+ *   name: dsh-weixin-clawbot
  *   config:
  *     puppet: wechaty-puppet-wechat
  *     dmPolicy: pairing
@@ -13,7 +13,7 @@
  *     groups: ["xxx@chatroom"]
  * ```
  *
- * @module dsh-wechat
+ * @module dsh-weixin-clawbot
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -68,7 +68,7 @@ export {
   type WorkspaceScope,
 } from './state.js'
 
-export const name = 'dsh-wechat'
+export const name = 'dsh-weixin-clawbot'
 
 export const inject = ['agents', 'sessions', 'agentDefaultModel'] as const
 
@@ -111,7 +111,7 @@ function jsonReply(res: ServerResponse, status: number, body: unknown): void {
 export function apply(ctx: Context, config: WechatConfig): void {
   const backend = new WechatBackend(ctx, config)
   void backend.start().catch((error: unknown) => {
-    ctx.logger.error(`dsh-wechat: 启动失败: ${String(error)}`)
+    ctx.logger.error(`dsh-weixin-clawbot: 启动失败: ${String(error)}`)
   })
 
   // 提供二维码给浏览器：web profile 里有 webServer 服务时注册 HTTP 路由；
@@ -128,7 +128,7 @@ export function apply(ctx: Context, config: WechatConfig): void {
         res.end(JSON.stringify(backend.qrPayload()))
       },
     }
-    webCtx.effect(() => webCtx.webServer.register(route), 'dsh-wechat: /wechat/qrcode route')
+    webCtx.effect(() => webCtx.webServer.register(route), 'dsh-weixin-clawbot: /wechat/qrcode route')
 
     webCtx.effect(() => webCtx.webServer.register({
       kind: 'exact',
@@ -142,7 +142,7 @@ export function apply(ctx: Context, config: WechatConfig): void {
         }
         jsonReply(res, 200, { ok: true, settings: backend.updateSettings(verdict.patch) })
       },
-    } satisfies WebRoute), 'dsh-wechat: /wechat/settings route')
+    } satisfies WebRoute), 'dsh-weixin-clawbot: /wechat/settings route')
 
     webCtx.effect(() => webCtx.webServer.register({
       kind: 'exact',
@@ -156,7 +156,7 @@ export function apply(ctx: Context, config: WechatConfig): void {
         backend.submitVerifyCode(body.code.trim())
         jsonReply(res, 200, { ok: true })
       },
-    } satisfies WebRoute), 'dsh-wechat: /wechat/verify route')
+    } satisfies WebRoute), 'dsh-weixin-clawbot: /wechat/verify route')
 
     webCtx.effect(() => webCtx.webServer.register({
       kind: 'exact',
@@ -165,7 +165,7 @@ export function apply(ctx: Context, config: WechatConfig): void {
         await backend.logout()
         jsonReply(res, 200, { ok: true })
       },
-    } satisfies WebRoute), 'dsh-wechat: /wechat/logout route')
+    } satisfies WebRoute), 'dsh-weixin-clawbot: /wechat/logout route')
   })
 
   // workspaceRegistry 可选注入：注册表上线时把工作区列表接进后端；
@@ -174,7 +174,7 @@ export function apply(ctx: Context, config: WechatConfig): void {
     backend.setWorkspaceRegistry(regCtx.workspaceRegistry)
     regCtx.effect(
       () => () => backend.setWorkspaceRegistry(undefined),
-      'dsh-wechat: workspaceRegistry unbind',
+      'dsh-weixin-clawbot: workspaceRegistry unbind',
     )
   })
 
@@ -184,7 +184,7 @@ export function apply(ctx: Context, config: WechatConfig): void {
     backend.setAgentPresets(presetCtx.agentPresets)
     presetCtx.effect(
       () => () => backend.setAgentPresets(undefined),
-      'dsh-wechat: agentPresets unbind',
+      'dsh-weixin-clawbot: agentPresets unbind',
     )
   })
 
