@@ -149,8 +149,8 @@ describe('WechatBackend × iLink', () => {
       contextToken: 'CTX-42',
     })
     await vi.waitFor(() => expect(followup).toHaveBeenCalledTimes(1))
-    expect(String((ctx.agents.create as ReturnType<typeof vi.fn>).mock.calls[0][0].sessionId)).toBe(
-      'wechat:direct:user-1',
+    expect(String((ctx.agents.create as ReturnType<typeof vi.fn>).mock.calls[0][0].sessionId)).toMatch(
+      /^wechat:direct:user-1~p[0-9a-z]+$/,
     )
 
     // assistant 回复 → ilink sendText（带 context token）

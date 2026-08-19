@@ -306,8 +306,8 @@ describe('WechatBackend 运行时设置', () => {
     // 默认路由到第一个勾选的工作区 w2
     await (onMessage as (m: never) => Promise<void>)(makeMessage({ text: () => '你好' }) as never)
     expect(lastCreateArg(ctx).meta?.cwd).toBe('/p/sleuth')
-    expect(String((ctx.agents.create as Mock).mock.calls.at(-1)?.[0].sessionId)).toBe(
-      'wechat:direct:wxid_abc#w2',
+    expect(String((ctx.agents.create as Mock).mock.calls.at(-1)?.[0].sessionId)).toMatch(
+      /^wechat:direct:wxid_abc#w2~p[0-9a-z]+$/,
     )
 
     // /ws 列表 → /ws 1 切换 → 下条消息进入 w1 会话
@@ -319,8 +319,8 @@ describe('WechatBackend 运行时设置', () => {
     fakeBot.sent.length = 0
     await (onMessage as (m: never) => Promise<void>)(makeMessage({ text: () => '继续' }) as never)
     expect(lastCreateArg(ctx).meta?.cwd).toBe('/p/dsh')
-    expect(String((ctx.agents.create as Mock).mock.calls.at(-1)?.[0].sessionId)).toBe(
-      'wechat:direct:wxid_abc#w1',
+    expect(String((ctx.agents.create as Mock).mock.calls.at(-1)?.[0].sessionId)).toMatch(
+      /^wechat:direct:wxid_abc#w1~p[0-9a-z]+$/,
     )
 
     // 两个工作区的会话并存（第一条消息在 w2，切换后落在 w1）
@@ -347,34 +347,27 @@ describe('WechatBackend 运行时设置', () => {
     expect(subjectFromSessionId('wechat:direct:wxid_abc#w1~abc123')).toEqual({ kind: 'direct', id: 'wxid_abc' })
   })
 
-  it('持久化会话用 seed 接管（同 id 不再 collision）；/new 铸造全新 id', async () => {
+  it('会话 id 带进程代次后缀（重启不撞持久化）；/new 再叠时间戳铸新 id', async () => {
     const { ctx } = makeContext()
     const backend = new WechatBackend(ctx, makeConfig(), tempStateFile())
-    const persistedEvents = [
-      { seq: 0, type: 'user/message', data: {} },
-      { seq: 1, type: 'assistant/message', data: {} },
-    ]
-    backend.setSessionPersistence({
-      inspect: vi.fn(async (id: unknown) => {
-        if (String(id).includes('~')) throw new Error(`session "${String(id)}" not found`)
-        return { meta: { cwd: '/persisted-cwd' }, events: persistedEvents }
-      }) as never,
-    })
     await backend.start()
     const onMessage = fakeBot.handlers.get('message')
     const send = (m: unknown) => (onMessage as (m: never) => Promise<void>)(m as never)
 
     await send(makeMessage())
-    const first = (ctx.agents.create as Mock).mock.calls[0][0]
-    expect(first.seed).toEqual(persistedEvents)
-    expect(first.meta.cwd).toBe('/persisted-cwd')
+    const first = String((ctx.agents.create as Mock).mock.calls[0][0].sessionId)
+    expect(first).toMatch(/^wechat:direct:wxid_abc~p[0-9a-z]+$/)
 
-    // /new → 下条消息用带 ~ 后缀的全新 id，不再接管历史
-    await send(makeMessage({ text: () => '/new' }))
+    // 同一进程内连续消息复用同一会话
     await send(makeMessage({ text: () => '第二条' }))
-    const second = (ctx.agents.create as Mock).mock.calls[1][0]
-    expect(String(second.sessionId)).toMatch(/~[0-9a-z]+$/)
-    expect(second.seed).toBeUndefined()
+    expect((ctx.agents.create as Mock).mock.calls.length).toBe(1)
+
+    // /new → 全新 id（代次 + 时间戳）
+    await send(makeMessage({ text: () => '/new' }))
+    await send(makeMessage({ text: () => '第三条' }))
+    const second = String((ctx.agents.create as Mock).mock.calls[1][0].sessionId)
+    expect(second).toMatch(/^wechat:direct:wxid_abc~p[0-9a-z]+~[0-9a-z]+$/)
+    expect(second).not.toBe(first)
 
     await backend.dispose()
   })

@@ -53,7 +53,7 @@ export {
   type WechatSubject,
 } from './sessions.js'
 export { WechatBackend } from './backend.js'
-export type { SessionPersistenceLike, WorkspaceRegistryLike } from './backend.js'
+export type { WorkspaceRegistryLike } from './backend.js'
 export {
   granularityFromConfig,
   loadState,
@@ -175,16 +175,6 @@ export function apply(ctx: Context, config: WechatConfig): void {
     regCtx.effect(
       () => () => backend.setWorkspaceRegistry(undefined),
       'dsh-wechat: workspaceRegistry unbind',
-    )
-  })
-
-  // sessionPersistence 可选注入：dsh 重启后用它读出已持久化的会话事件，
-  // 作为 seed 传回 agents.create 无冲突接管（否则同 id create 会报 id collision）。
-  ctx.inject(['sessionPersistence'], (pCtx) => {
-    backend.setSessionPersistence(pCtx.sessionPersistence)
-    pCtx.effect(
-      () => () => backend.setSessionPersistence(undefined),
-      'dsh-wechat: sessionPersistence unbind',
     )
   })
 

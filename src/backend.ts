@@ -86,17 +86,11 @@ export type WorkspaceRegistryLike = {
   list(): ReadonlyArray<{ id: unknown; title: string; path: string }>
 }
 
-/** sessionPersistence 的最小结构类型（读持久化事件用于 seed 接管）。 */
-export type SessionPersistenceLike = {
-  inspect(id: SessionId): Promise<{ meta: { cwd: string }; events: readonly SessionEvent[] }>
-}
-
 // 本地结构类型增强：真实服务由 @deepseek-ai/dsh-workspace 提供（运行时注入），
 // 插件编译不依赖该包，只声明自己用到的 list() 面。
 declare module '@deepseek-ai/cordis' {
   interface Context {
     workspaceRegistry?: WorkspaceRegistryLike
-    sessionPersistence?: SessionPersistenceLike
   }
 }
 
@@ -113,14 +107,12 @@ export class WechatBackend {
   private readonly stateFile: string
   /** 主体 → /ws 切换的当前工作区 id（内存态，重启回默认）。 */
   private readonly subjectWorkspace = new Map<string, string>()
-  /** 主体 → 当前会话 id（/new 后换成新生代 id；重启回到基础 id 并恢复历史）。 */
+  /** 主体 → 当前会话 id（/new 后换成新生代 id）。 */
   private readonly subjectSession = new Map<string, SessionId>()
-  /** /new 标记：下条消息铸造全新会话 id（保证不与持久化日志撞车）。 */
+  /** /new 标记：下条消息铸造全新会话 id。 */
   private readonly freshNext = new Set<string>()
-  /** 已尝试过 seed 接管检查的会话 id（避免重复 inspect）。 */
-  private readonly seedChecked = new Set<string>()
-  /** 持久化服务（index.ts 懒注入）。 */
-  private sessionPersistence: SessionPersistenceLike | undefined
+  /** 进程代次后缀：重启后换新 id，避免与磁盘持久化日志撞车。 */
+  private readonly processGen = `~p${process.pid.toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
   constructor(
     private readonly ctx: Context,
@@ -171,11 +163,6 @@ export class WechatBackend {
     this.workspaceRegistry = registry
   }
 
-  /** sessionPersistence 注入/撤销（index.ts 懒注入调用）。 */
-  setSessionPersistence(persistence: SessionPersistenceLike | undefined): void {
-    this.sessionPersistence = persistence
-  }
-
   /** 工作区列表投影（无注册表时空数组）。 */
   workspacesProjection(): WorkspaceLite[] {
     return (this.workspaceRegistry?.list() ?? []).map((workspace) => ({
@@ -209,18 +196,24 @@ export class WechatBackend {
     return this.allowedWorkspaceIds()[0]
   }
 
-  /** 会话路由：当前工作区 → 会话 id（每工作区独立历史）+ agent cwd。 */
+  /** 会话路由：当前工作区 → 会话 id（每工作区独立历史）+ agent cwd。
+   *
+   * 会话 id 带进程代次后缀（`~p…`）：rc.7 的 agents.create 不支持恢复
+   * 已持久化的同 id 会话（重启后同 id 重建会被判 id collision / already
+   * exists），因此每个进程用独立代次——进程内连续、重启开新篇（旧对话
+   * 仍持久化在磁盘，可在 Web UI 查看）。/new 再叠加时间戳铸造全新 id。
+   */
   private routeFor(subject: WechatSubject): { sessionId: SessionId; cwd: string; workspaceId?: string } {
     const workspaceId = this.currentWorkspaceId(subject)
-    const base = sessionIdFor(subject, workspaceId)
+    const base = `${String(sessionIdFor(subject, workspaceId))}${this.processGen}`
     const key = subjectKey(subject)
 
     let sessionId = this.subjectSession.get(key)
-    // 记住的会话不属于当前工作区（/ws 切换后）→ 回到该工作区的基础 id
-    if (sessionId === undefined || (!String(sessionId).startsWith(`${base}`) && String(sessionId) !== base)) {
-      sessionId = base
+    // 记住的会话不属于当前工作区（/ws 切换后）→ 回到该工作区的代次 id
+    if (sessionId === undefined || !String(sessionId).startsWith(base)) {
+      sessionId = SessionId(base)
     }
-    // /new：铸造全局唯一的新生代 id，绝不与磁盘日志撞车
+    // /new：再叠时间戳，保证全新
     if (this.freshNext.has(key)) {
       this.freshNext.delete(key)
       sessionId = SessionId(`${base}~${Date.now().toString(36)}`)
@@ -429,7 +422,12 @@ export class WechatBackend {
     const channel = this.ilinkChannel
     if (channel === undefined) return
     await channel.runMessageLoop(
-      (message) => void this.handleIlinkMessage(message),
+      // 异步处理必须自带 catch：裸 void 会让 rejection 冒泡成 dsh fatal 崩溃
+      (message) => {
+        this.handleIlinkMessage(message).catch((error: unknown) =>
+          this.log(`[wechat] 处理消息失败: ${String(error)}`),
+        )
+      },
       (error) => this.log(`[wechat] iLink 消息循环错误: ${String(error)}`),
     )
     // 循环退出且凭据已失效 → 回到扫码
@@ -748,57 +746,35 @@ export class WechatBackend {
     return `已切换到「${target.title}」（${target.path}）。\n下条消息起在这个工作区继续，每个工作区会话独立。`
   }
 
-/** 获取（或创建）一个微信主体专属的 agent（cwd 由路由决定）。
+  /** 获取（或创建）一个微信主体专属的 agent（cwd 由路由决定）。
+   *
+   * rc.7 的 agents.create 不支持恢复已持久化会话；会话 id 由 routeFor
+   * 保证每进程独立代次，这里无需（也不能）传 seed 接管。
+   */
+  private async getOrCreateAgent(sessionId: SessionId, cwd: string): Promise<Agent> {
+    const key = String(sessionId)
+    const existing = this.owned.get(key)
+    if (existing) return existing.agent
 
- * dsh 重启后同一会话 id 在磁盘上已有持久化日志：直接 create 会被持久化
- * 协调器判为 id collision。正确姿势是把已存事件作为 seed 传回 create，
- * 走 adopt 分支无冲突接管（历史完整保留）。
- */
-private async getOrCreateAgent(sessionId: SessionId, cwd: string): Promise<Agent> {
-  const key = String(sessionId)
-  const existing = this.owned.get(key)
-  if (existing) return existing.agent
-
-  let seed: readonly SessionEvent[] | undefined
-  let adoptCwd = cwd
-  if (this.sessionPersistence !== undefined && !this.seedChecked.has(key)) {
-    this.seedChecked.add(key)
-    try {
-      const persisted = await this.sessionPersistence.inspect(sessionId)
-      if (persisted.events.length > 0) {
-        seed = persisted.events
-        adoptCwd = persisted.meta.cwd
-        this.log(`[wechat] 接管持久化会话 ${sessionId}（${persisted.events.length} 事件）`)
-      }
-    } catch (error) {
-      // 不存在的会话会抛 not found——按新建静默处理；其他错误也降级为新建
-      const message = String(error)
-      if (!message.includes('not found')) {
-        this.log(`[wechat] 读取持久化会话失败（按新建处理）: ${message}`)
-      }
-    }
+    const selection = this.ctx.agentDefaultModel.currentSelection()
+    const { agent, dispose } = await this.ctx.agents.create({
+      sessionId,
+      meta: { cwd },
+      agentOptions: {
+        provider: selection.provider,
+        model: this.config.model || selection.model,
+      },
+      setup: (agentCtx) => {
+        installModelSelection(agentCtx, {
+          current: selection,
+          assembled: undefined,
+        })
+      },
+    })
+    this.owned.set(key, { agent, dispose })
+    this.log(`[wechat] 已创建会话 ${sessionId}（provider=${selection.provider} model=${this.config.model || selection.model}）`)
+    return agent
   }
-
-  const selection = this.ctx.agentDefaultModel.currentSelection()
-  const { agent, dispose } = await this.ctx.agents.create({
-    sessionId,
-    meta: { cwd: adoptCwd },
-    ...(seed !== undefined ? { seed } : {}),
-    agentOptions: {
-      provider: selection.provider,
-      model: this.config.model || selection.model,
-    },
-    setup: (agentCtx) => {
-      installModelSelection(agentCtx, {
-        current: selection,
-        assembled: undefined,
-      })
-    },
-  })
-  this.owned.set(key, { agent, dispose })
-  this.log(`[wechat] 已创建会话 ${sessionId}（provider=${selection.provider} model=${this.config.model || selection.model}）`)
-  return agent
-}
 
   /** 回复微信：按配置分块发送文本。 */
   private async reply(targetId: string, text: string): Promise<void> {
