@@ -83,7 +83,18 @@ export type WechatQrPayload = {
 
 /** workspaceRegistry 的最小结构类型：避免新增包依赖。 */
 export type WorkspaceRegistryLike = {
-  list(): ReadonlyArray<{ id: unknown; title: string; path: string }>
+  list(): ReadonlyArray<{
+    id: unknown
+    title: string
+    path: string
+    attachSession?: (sessionId: unknown) => Promise<void>
+  }>
+}
+
+/** agentPresets 的最小结构类型（resolve + mount 装配工具组合）。 */
+export type AgentPresetsLike = {
+  resolve(id?: string): Promise<{ id: string }>
+  mount(agentCtx: Context, id?: string): Promise<unknown>
 }
 
 // 本地结构类型增强：真实服务由 @deepseek-ai/dsh-workspace 提供（运行时注入），
@@ -91,6 +102,7 @@ export type WorkspaceRegistryLike = {
 declare module '@deepseek-ai/cordis' {
   interface Context {
     workspaceRegistry?: WorkspaceRegistryLike
+    agentPresets?: AgentPresetsLike
   }
 }
 
@@ -103,6 +115,8 @@ export class WechatBackend {
   private readonly log: (message: string) => void
   private qrState: WechatQrState = { kind: 'none' }
   private workspaceRegistry: WorkspaceRegistryLike | undefined
+  /** agentPresets 服务（index.ts 懒注入）：给微信 agent 装配工具组合。 */
+  private agentPresets: AgentPresetsLike | undefined
   private overrides: RuntimeOverrides = {}
   private readonly stateFile: string
   /** 主体 → /ws 切换的当前工作区 id（内存态，重启回默认）。 */
@@ -161,6 +175,11 @@ export class WechatBackend {
   /** workspaceRegistry 注入/撤销（index.ts 懒注入调用）。 */
   setWorkspaceRegistry(registry: WorkspaceRegistryLike | undefined): void {
     this.workspaceRegistry = registry
+  }
+
+  /** agentPresets 注入/撤销（index.ts 懒注入调用）。 */
+  setAgentPresets(presets: AgentPresetsLike | undefined): void {
+    this.agentPresets = presets
   }
 
   /** 工作区列表投影（无注册表时空数组）。 */
@@ -569,8 +588,8 @@ export class WechatBackend {
       return
     }
 
-    const { sessionId, cwd } = this.routeFor(subject)
-    const agent = await this.getOrCreateAgent(sessionId, cwd)
+    const { sessionId, cwd, workspaceId } = this.routeFor(subject)
+    const agent = await this.getOrCreateAgent(sessionId, cwd, workspaceId)
     agent.followup(
       createUserMessage({
         content: [{ type: 'text', text: body }],
@@ -751,28 +770,69 @@ export class WechatBackend {
    * rc.7 的 agents.create 不支持恢复已持久化会话；会话 id 由 routeFor
    * 保证每进程独立代次，这里无需（也不能）传 seed 接管。
    */
-  private async getOrCreateAgent(sessionId: SessionId, cwd: string): Promise<Agent> {
+  private async getOrCreateAgent(
+    sessionId: SessionId,
+    cwd: string,
+    workspaceId?: string,
+  ): Promise<Agent> {
     const key = String(sessionId)
     const existing = this.owned.get(key)
     if (existing) return existing.agent
 
     const selection = this.ctx.agentDefaultModel.currentSelection()
+
+    // 工具组合（标准模式等）必须在 setup 里 mount，否则 agent 是裸的——
+    // 模型会把工具调用当纯文本写出来（对齐 apiproxy 的 composeAgent 流程）。
+    const presets = this.agentPresets
+    let agentPreset: string | undefined
+    if (presets !== undefined) {
+      try {
+        agentPreset = (await presets.resolve(undefined)).id
+      } catch (error) {
+        this.log(`[wechat] 解析 agent preset 失败（跳过装配）: ${String(error)}`)
+      }
+    }
+
     const { agent, dispose } = await this.ctx.agents.create({
       sessionId,
-      meta: { cwd },
+      meta: {
+        cwd,
+        ...(agentPreset !== undefined ? { agentPreset } : {}),
+      },
       agentOptions: {
         provider: selection.provider,
         model: this.config.model || selection.model,
       },
-      setup: (agentCtx) => {
+      setup: async (agentCtx) => {
         installModelSelection(agentCtx, {
           current: selection,
           assembled: undefined,
         })
+        if (presets !== undefined && agentPreset !== undefined) {
+          try {
+            await presets.mount(agentCtx, agentPreset)
+            this.log(`[wechat] 已装配工具组合 ${agentPreset}`)
+          } catch (error) {
+            // 装配失败不阻断会话（agent 降级为无工具），记日志便于排查
+            this.log(`[wechat] 装配工具组合失败（agent 将无工具）: ${String(error)}`)
+          }
+        }
       },
     })
     this.owned.set(key, { agent, dispose })
-    this.log(`[wechat] 已创建会话 ${sessionId}（provider=${selection.provider} model=${this.config.model || selection.model}）`)
+    this.log(`[wechat] 已创建会话 ${sessionId}（provider=${selection.provider} model=${this.config.model || selection.model}${agentPreset !== undefined ? ` preset=${agentPreset}` : ''}）`)
+
+    // 会话挂进工作区（Web 端侧边栏按工作区分组展示）；失败只影响归组不影响对话
+    if (workspaceId !== undefined && this.workspaceRegistry !== undefined) {
+      const record = this.workspaceRegistry.list().find(
+        (workspace) => String(workspace.id) === workspaceId,
+      )
+      try {
+        await record?.attachSession?.(sessionId)
+      } catch (error) {
+        this.log(`[wechat] 会话挂入工作区失败: ${String(error)}`)
+      }
+    }
     return agent
   }
 

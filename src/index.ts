@@ -53,7 +53,7 @@ export {
   type WechatSubject,
 } from './sessions.js'
 export { WechatBackend } from './backend.js'
-export type { WorkspaceRegistryLike } from './backend.js'
+export type { AgentPresetsLike, WorkspaceRegistryLike } from './backend.js'
 export {
   granularityFromConfig,
   loadState,
@@ -175,6 +175,16 @@ export function apply(ctx: Context, config: WechatConfig): void {
     regCtx.effect(
       () => () => backend.setWorkspaceRegistry(undefined),
       'dsh-wechat: workspaceRegistry unbind',
+    )
+  })
+
+  // agentPresets 可选注入：微信 agent 的 setup 里 mount 默认工具组合
+  // （标准模式），否则 agent 无工具、模型把工具调用写成纯文本。
+  ctx.inject(['agentPresets'], (presetCtx) => {
+    backend.setAgentPresets(presetCtx.agentPresets)
+    presetCtx.effect(
+      () => () => backend.setAgentPresets(undefined),
+      'dsh-wechat: agentPresets unbind',
     )
   })
 
