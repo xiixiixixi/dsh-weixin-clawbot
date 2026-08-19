@@ -538,6 +538,8 @@ function WechatFooterAction(props: SidebarFooterActionOwnerProps): JSX.Element {
   const { payload, error, refresh } = useQrPoll(open)
   const status = statusOf(payload, error)
   const connected = payload?.state.kind === 'logged-in'
+  // 入口角标：已连接=绿，连接失败（后端不可达/轮询错误）=红，等待态不显示
+  const badgeTone = status.dot === 'done' ? 'ok' : status.dot === 'error' ? 'error' : null
 
   return (
     <>
@@ -551,7 +553,12 @@ function WechatFooterAction(props: SidebarFooterActionOwnerProps): JSX.Element {
         >
           <PhoneGlyph />
           {props.wide && <span>微信</span>}
-          {connected && <span className="dsh-weixin-clawbot-badge" aria-hidden="true" />}
+          {badgeTone !== null && (
+            <span
+              className={`dsh-weixin-clawbot-badge${badgeTone === 'error' ? ' dsh-weixin-clawbot-badge-error' : ''}`}
+              aria-hidden="true"
+            />
+          )}
         </button>
       </Tooltip>
       <WechatDialog

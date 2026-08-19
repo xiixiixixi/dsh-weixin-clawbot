@@ -37,7 +37,7 @@
   border-radius: 12px;
 }
 
-/* 连通角标：图标右下角 8px 绿点 */
+/* 连通角标：图标右下角 8px 圆点；已连接=绿，连接失败=红 */
 .dsh-weixin-clawbot-badge {
   position: absolute;
   right: 7px;
@@ -47,6 +47,10 @@
   border-radius: 50%;
   background: var(--dsw-alias-state-success-primary);
   box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-1);
+}
+
+.dsh-weixin-clawbot-badge-error {
+  background: var(--dsw-alias-state-error-primary);
 }
 
 /* ── 弹窗（挂 Modal className，卡片从 380 扩到 420） ─────── */
